@@ -199,14 +199,38 @@ public class FakeCallActivity extends BaseActivity {
     // ON CREATE
     // ============================================================
 
+    // ============================================================
+    // ON CREATE
+    // ============================================================
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
 
+        // ============================================================
+        // SHOW OVER LOCK SCREEN & TURN ON DISPLAY
+        // ============================================================
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        } else {
+            getWindow().addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                            android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                            android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                            android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            );
+        }
+
         setContentView(
                 R.layout.activity_fake_call
         );
+
+        // ============================================================
+        // FORCE LOUDSPEAKER & MAX VOLUME
+        // ============================================================
+        forceMobileSpeakerOutput();
 
         initializeViews();
 
@@ -219,6 +243,69 @@ public class FakeCallActivity extends BaseActivity {
         setupKeypad();
 
         startRingtone();
+    }
+
+    // ============================================================
+// FORCE AUDIO TO PHONE LOUDSPEAKER AT MAX VOLUME
+// ============================================================
+
+    private void forceMobileSpeakerOutput() {
+        try {
+            AudioManager audioManager =
+                    (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+
+            if (audioManager != null) {
+
+                // 1. Set all relevant audio streams to MAXIMUM volume
+                int maxRing = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING);
+                audioManager.setStreamVolume(AudioManager.STREAM_RING, maxRing, 0);
+
+                int maxVoice = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL);
+                audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxVoice, 0);
+
+                int maxMusic = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0);
+
+                // 2. Force routing to Built-In Loudspeaker (bypasses Bluetooth/Pods)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // Android 12+
+                    for (android.media.AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+                        if (device.getType() == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                            audioManager.setCommunicationDevice(device);
+                            break;
+                        }
+                    }
+                } else {
+                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    audioManager.setSpeakerphoneOn(true);
+                }
+            }
+
+        } catch (Exception e) {
+            Log.e("FakeCallActivity", "Unable to force mobile speaker output", e);
+        }
+    }
+
+
+// ============================================================
+// RESET AUDIO ROUTING WHEN CALL ENDS
+// ============================================================
+
+    private void resetAudioRouting() {
+        try {
+            AudioManager audioManager =
+                    (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+
+            if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    audioManager.clearCommunicationDevice();
+                } else {
+                    audioManager.setSpeakerphoneOn(false);
+                    audioManager.setMode(AudioManager.MODE_NORMAL);
+                }
+            }
+        } catch (Exception e) {
+            Log.e("FakeCallActivity", "Unable to reset audio routing", e);
+        }
     }
 
 
@@ -830,24 +917,26 @@ public class FakeCallActivity extends BaseActivity {
         try {
 
             // Prevent multiple MediaPlayers
-
             if (fakeCallAudio != null) {
 
                 if (fakeCallAudio.isPlaying()) {
-
                     return;
                 }
 
                 fakeCallAudio.release();
-
                 fakeCallAudio = null;
             }
 
 
             // ====================================================
+            // FORCE LOUDSPEAKER & MAX VOLUME
+            // ====================================================
+            forceMobileSpeakerOutput();
+
+
+            // ====================================================
             // CREATE PLAYER FROM res/raw/fake_call.mp4
             // ====================================================
-
             fakeCallAudio =
                     MediaPlayer.create(
                             this,
@@ -870,19 +959,15 @@ public class FakeCallActivity extends BaseActivity {
             // ====================================================
             // AUDIO SETTINGS
             // ====================================================
-
-            if (Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.LOLLIPOP) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 
                 fakeCallAudio.setAudioAttributes(
                         new AudioAttributes.Builder()
                                 .setUsage(
-                                        AudioAttributes
-                                                .USAGE_VOICE_COMMUNICATION
+                                        AudioAttributes.USAGE_VOICE_COMMUNICATION
                                 )
                                 .setContentType(
-                                        AudioAttributes
-                                                .CONTENT_TYPE_SPEECH
+                                        AudioAttributes.CONTENT_TYPE_SPEECH
                                 )
                                 .build()
                 );
@@ -890,9 +975,31 @@ public class FakeCallActivity extends BaseActivity {
 
 
             // ====================================================
+            // DIRECT OUTPUT TO INTERNAL SPEAKER (API 23+)
+            // ====================================================
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+
+                AudioManager audioManager =
+                        (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+
+                if (audioManager != null) {
+
+                    for (android.media.AudioDeviceInfo device :
+                            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+
+                        if (device.getType() == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+
+                            fakeCallAudio.setPreferredDevice(device);
+                            break;
+                        }
+                    }
+                }
+            }
+
+
+            // ====================================================
             // PLAY ONLY ONCE
             // ====================================================
-
             fakeCallAudio.setLooping(
                     false
             );
@@ -901,7 +1008,6 @@ public class FakeCallActivity extends BaseActivity {
             // ====================================================
             // RELEASE AFTER AUDIO FINISHES
             // ====================================================
-
             fakeCallAudio.setOnCompletionListener(
                     mp -> {
 
@@ -915,7 +1021,6 @@ public class FakeCallActivity extends BaseActivity {
             // ====================================================
             // START
             // ====================================================
-
             fakeCallAudio.start();
 
 
@@ -1256,6 +1361,12 @@ public class FakeCallActivity extends BaseActivity {
         // ========================================================
 
         stopFakeCallAudio();
+
+        // ========================================================
+        // RESET AUDIO ROUTING (RESTORE BLUETOOTH / NORMAL MODE)
+        // ========================================================
+
+        resetAudioRouting();
 
         handler.removeCallbacksAndMessages(
                 null

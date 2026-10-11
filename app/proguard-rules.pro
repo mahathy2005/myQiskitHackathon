@@ -19,3 +19,15 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Suppress missing SLF4J logger binding warning
+-dontwarn org.slf4j.**
+
+# Prevent ProGuard from stripping Vosk offline speech recognition native calls
+-keep class com.alphacephei.vosk.** { *; }
+-dontwarn com.alphacephei.vosk.**
+
+# Preserve GraphHopper / Mapsforge classes used in offline mapping
+-keep class com.graphhopper.** { *; }
+-dontwarn com.graphhopper.**
+-keep class org.mapsforge.** { *; }
+-dontwarn org.mapsforge.**

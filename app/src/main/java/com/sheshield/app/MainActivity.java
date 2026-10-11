@@ -1,5 +1,9 @@
 package com.sheshield.app;
 import android.content.Intent;
+import android.net.Uri;
+import android.view.View;
+import android.widget.Toast;
+import android.content.Intent;
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -7,7 +11,6 @@ import android.animation.AnimatorSet;
 import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
@@ -33,6 +36,10 @@ import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.navigation.NavigationView;
+
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,6 +91,13 @@ public class MainActivity extends BaseActivity {
     private DrawerLayout drawerLayout;
     private NavigationView navigationView;
 
+    // ============================================================
+    // FIREBASE
+    // ============================================================
+
+    private FirebaseAuth mAuth;
+    private FirebaseFirestore db;
+
 
     // ============================================================
     // SOS BUTTON
@@ -121,6 +135,14 @@ public class MainActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_main);
+
+        // ========================================================
+        // FIREBASE INITIALIZATION
+        // ========================================================
+
+        FirebaseApp.initializeApp(this);
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
 
 
         // ========================================================
@@ -1235,20 +1257,21 @@ public class MainActivity extends BaseActivity {
 
         // Live Location
         View cardLiveLocation =
-                findViewById(
-                        R.id.cardLiveLocation
-                );
+                findViewById(R.id.cardLiveLocation);
 
         if (cardLiveLocation != null) {
 
-            cardLiveLocation.setOnClickListener(v ->
+            cardLiveLocation.setOnClickListener(v -> {
 
-                    Toast.makeText(
-                            MainActivity.this,
-                            "Live Location page coming soon",
-                            Toast.LENGTH_SHORT
-                    ).show()
-            );
+                Intent intent =
+                        new Intent(
+                                MainActivity.this,
+                                OfflineMapActivity.class
+                        );
+
+                startActivity(intent);
+
+            });
         }
 
 
@@ -1301,6 +1324,14 @@ public class MainActivity extends BaseActivity {
             });
         }
 
+        View cardQuantumDashboard =
+                findViewById(R.id.cardQuantumDashboard);
+
+        if (cardQuantumDashboard != null) {
+            cardQuantumDashboard.setOnClickListener(v ->
+                    openQuantumDashboard()
+            );
+        }
 
         // Safety Tips
         View cardSafetyTips =
@@ -1335,21 +1366,26 @@ public class MainActivity extends BaseActivity {
 
 
         // Report Incident
-        View cardReportIncident =
-                findViewById(
-                        R.id.cardReportIncident
-                );
+        // Report Incident
+        View cardReportIncident = findViewById(R.id.cardReportIncident);
 
         if (cardReportIncident != null) {
-
-            cardReportIncident.setOnClickListener(v ->
-
+            cardReportIncident.setOnClickListener(v -> {
+                try {
+                    Intent intent = new Intent(
+                            MainActivity.this,
+                            IncidentReportActivity.class
+                    );
+                    startActivity(intent);
+                } catch (Exception e) {
                     Toast.makeText(
                             MainActivity.this,
-                            "Report Incident page coming soon",
+                            "Unable to open Report Incident page",
                             Toast.LENGTH_SHORT
-                    ).show()
-            );
+                    ).show();
+                    e.printStackTrace();
+                }
+            });
         }
 
 
@@ -1408,7 +1444,14 @@ public class MainActivity extends BaseActivity {
                 }
             });
         }
+
+        // Quantum Dashboard
+        cardQuantumDashboard = findViewById(R.id.cardQuantumDashboard);
+        if (cardQuantumDashboard != null) {
+            cardQuantumDashboard.setOnClickListener(v -> openQuantumDashboard());
+        }
     }
+
 
 
     // ============================================================
@@ -1795,6 +1838,15 @@ public class MainActivity extends BaseActivity {
         // VoiceSosService must continue running outside MainActivity.
 
         super.onDestroy();
+
+    }
+
+    private void openQuantumDashboard() {
+        Intent intent = new Intent(
+                OfflineMapActivity.this,
+                QuantumDashboardActivity.class
+        );
+        startActivity(intent);
     }
 
 }

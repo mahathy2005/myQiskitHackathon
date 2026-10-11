@@ -1,7 +1,435 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-             android:orientation="vertical"
-             android:layout_width="match_parent"
-             android:layout_height="match_parent">
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FAF4F6">
 
-</LinearLayout>
+    <!-- MAP -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- TOP SEARCH CARD -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/searchCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="14dp"
+        app:cardBackgroundColor="#FFFFFF"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="6dp"
+        app:strokeColor="#F3DCE5"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_marginEnd="10dp"
+                    android:contentDescription="Search"
+                    android:src="@android:drawable/ic_menu_search"
+                    android:tint="#FB5792" />
+
+                <AutoCompleteTextView
+                    android:id="@+id/etDestination"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:completionThreshold="2"
+                    android:dropDownAnchor="@id/etDestination"
+                    android:dropDownHeight="wrap_content"
+                    android:dropDownVerticalOffset="4dp"
+                    android:hint="Where do you want to go?"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:padding="0dp"
+                    android:textColor="#1A1A2E"
+                    android:textColorHint="#99909A"
+                    android:textSize="15sp" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvNetworkStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Checking connection..."
+                android:textColor="#777777"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvRouteStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="Choose a destination to begin"
+                android:textColor="#777777"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+
+    <!-- DESTINATION / DIRECTIONS CARD -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/destinationPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_margin="10dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="#FFFFFF"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="10dp"
+        app:strokeColor="#F4D8E2"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="#FFF0F5"
+                    android:gravity="center"
+                    android:text="📍"
+                    android:textSize="20sp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvDestinationName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLines="2"
+                        android:text="Destination"
+                        android:textColor="#1A1A2E"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvDestinationAddress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:maxLines="2"
+                        android:text="Selected destination"
+                        android:textColor="#88818A"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="17dp"
+                android:text="Choose how you want to travel"
+                android:textColor="#1A1A2E"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+
+            <LinearLayout
+                android:id="@+id/layoutTransportModes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal"
+                android:weightSum="4">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCar"
+                    android:layout_width="0dp"
+                    android:layout_height="58dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:text="🚗\nCar"
+                    android:textAllCaps="false"
+                    android:textColor="#1A1A2E"
+                    android:textSize="11sp"
+                    app:backgroundTint="#FFF0F5"
+                    app:cornerRadius="14dp"
+                    app:strokeColor="#F2D5E0"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnWalk"
+                    android:layout_width="0dp"
+                    android:layout_height="58dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:text="🚶\nWalk"
+                    android:textAllCaps="false"
+                    android:textColor="#1A1A2E"
+                    android:textSize="11sp"
+                    app:backgroundTint="#FFFFFF"
+                    app:cornerRadius="14dp"
+                    app:strokeColor="#E5DDE1"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBike"
+                    android:layout_width="0dp"
+                    android:layout_height="58dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:text="🚲\nBike"
+                    android:textAllCaps="false"
+                    android:textColor="#1A1A2E"
+                    android:textSize="11sp"
+                    app:backgroundTint="#FFFFFF"
+                    app:cornerRadius="14dp"
+                    app:strokeColor="#E5DDE1"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnTransit"
+                    android:layout_width="0dp"
+                    android:layout_height="58dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:text="🚆\nTransit"
+                    android:textAllCaps="false"
+                    android:textColor="#1A1A2E"
+                    android:textSize="11sp"
+                    app:backgroundTint="#FFFFFF"
+                    app:cornerRadius="14dp"
+                    app:strokeColor="#E5DDE1"
+                    app:strokeWidth="1dp" />
+
+            </LinearLayout>
+
+
+            <!-- ROUTE OPTIONS -->
+            <LinearLayout
+                android:id="@+id/layoutRouteOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSafestRoute"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_marginEnd="5dp"
+                    android:layout_weight="1"
+                    android:text="🛡 Safest\n--"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    app:backgroundTint="#FB5792"
+                    app:cornerRadius="15dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFastestRoute"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_marginStart="5dp"
+                    android:layout_weight="1"
+                    android:text="⚡ Fastest\n--"
+                    android:textAllCaps="false"
+                    android:textColor="#1A1A2E"
+                    android:textSize="12sp"
+                    app:backgroundTint="#FFF0F5"
+                    app:cornerRadius="15dp"
+                    app:strokeColor="#F2D5E0"
+                    app:strokeWidth="1dp" />
+
+            </LinearLayout>
+
+
+            <!-- SELECTED ROUTE -->
+            <LinearLayout
+                android:id="@+id/layoutDirections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvTravelInfo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="-- km · -- min"
+                        android:textColor="#1A1A2E"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvTravelMode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="🚗 Car"
+                        android:textColor="#777777"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvRouteType"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#FFF0F5"
+                    android:paddingStart="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="6dp"
+                    android:text="Route"
+                    android:textColor="#E91E63"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStartNavigation"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="13dp"
+                android:text="Directions"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                app:backgroundTint="#FB5792"
+                app:cornerRadius="16dp" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+
+    <!-- LIVE NAVIGATION -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/navigationPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_margin="10dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="#FFFFFF"
+        app:cardCornerRadius="22dp"
+        app:cardElevation="10dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tvNavigationTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Navigation started"
+                android:textColor="#1A1A2E"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvNavigationInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="Calculating remaining distance..."
+                android:textColor="#777777"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStopNavigation"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="10dp"
+                android:text="Stop Navigation"
+                android:textAllCaps="false"
+                android:textColor="#D32F2F"
+                app:backgroundTint="#FFF1F1"
+                app:cornerRadius="14dp" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+
+    <!-- CURRENT LOCATION -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabMyLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="190dp"
+        android:contentDescription="My location"
+        android:src="@android:drawable/ic_menu_mylocation"
+        app:backgroundTint="#FFFFFF"
+        app:tint="#FB5792" />
+
+
+    <!-- SOS -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnTriggerSOS"
+        android:layout_width="wrap_content"
+        android:layout_height="50dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="190dp"
+        android:text="SOS"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        app:backgroundTint="#D32F2F"
+        app:cornerRadius="25dp" />
+
+</FrameLayout>

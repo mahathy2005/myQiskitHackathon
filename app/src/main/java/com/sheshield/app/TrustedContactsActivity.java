@@ -1,8 +1,6 @@
 package com.sheshield.app;
 
 import android.app.AlertDialog;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -20,20 +18,29 @@ import android.widget.Toast;
 import androidx.cardview.widget.CardView;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TrustedContactsActivity extends BaseActivity {
 
     // ============================================================
-    // PREFERENCES
+    // FIREBASE
     // ============================================================
 
-    private static final String PREF_NAME = "TrustedContacts";
-    private static final String CONTACTS_KEY = "contacts";
+    private FirebaseFirestore db;
+    private FirebaseAuth mAuth;
 
-    private SharedPreferences preferences;
+    private String userUid;
+
+    // ============================================================
+    // VIEWS
+    // ============================================================
+
     private LinearLayout contactsContainer;
 
     // ============================================================
@@ -43,20 +50,30 @@ public class TrustedContactsActivity extends BaseActivity {
     private static final int PINK =
             Color.parseColor("#E91E63");
 
+    private static final int DARK_PINK =
+            Color.parseColor("#C2185B");
+
     private static final int PURPLE =
             Color.parseColor("#8E24AA");
 
     private static final int DARK_TEXT =
-            Color.parseColor("#2D2B52");
+            Color.parseColor("#292642");
 
     private static final int GREY_TEXT =
             Color.parseColor("#777487");
 
-    private static final int SOFT_PINK =
+    private static final int LIGHT_PINK =
             Color.parseColor("#FCE4EC");
+
+    private static final int VERY_LIGHT_PINK =
+            Color.parseColor("#FFF7FA");
+
+    private static final int BORDER =
+            Color.parseColor("#F3D7E3");
 
     private static final int WHITE =
             Color.WHITE;
+
 
     // ============================================================
     // ON CREATE
@@ -64,16 +81,45 @@ public class TrustedContactsActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
 
         setContentView(
                 R.layout.activity_trusted_contacts
         );
 
-        preferences = getSharedPreferences(
-                PREF_NAME,
-                Context.MODE_PRIVATE
-        );
+        // ========================================================
+        // FIREBASE
+        // ========================================================
+
+        mAuth = FirebaseAuth.getInstance();
+
+        db = FirebaseFirestore.getInstance();
+
+        // ========================================================
+        // CURRENT USER
+        // ========================================================
+
+        FirebaseUser currentUser =
+                mAuth.getCurrentUser();
+
+        if (currentUser == null) {
+
+            showTranslatedToast(
+                    "Please login first",
+                    Toast.LENGTH_LONG
+            );
+
+            finish();
+            return;
+        }
+
+        userUid =
+                currentUser.getUid();
+
+        // ========================================================
+        // CONTAINER
+        // ========================================================
 
         contactsContainer =
                 findViewById(
@@ -97,7 +143,7 @@ public class TrustedContactsActivity extends BaseActivity {
         }
 
         // ========================================================
-        // ADD CONTACT BUTTON
+        // ADD CONTACT
         // ========================================================
 
         MaterialButton btnAddContact =
@@ -108,7 +154,7 @@ public class TrustedContactsActivity extends BaseActivity {
         if (btnAddContact != null) {
 
             btnAddContact.setOnClickListener(
-                    v -> showAddContactDialog(-1)
+                    v -> showAddContactDialog(null)
             );
         }
 
@@ -116,18 +162,113 @@ public class TrustedContactsActivity extends BaseActivity {
         // LOAD CONTACTS
         // ========================================================
 
-        loadContacts();
+        loadContactsFromFirestore();
     }
 
+
     // ============================================================
-    // SHOW ADD / EDIT CONTACT DIALOG
-    //
-    // position = -1 → ADD
-    // position >= 0 → EDIT
+    // LOAD CONTACTS
+    // ============================================================
+
+    private void loadContactsFromFirestore() {
+
+        if (contactsContainer == null) {
+            return;
+        }
+
+        contactsContainer.removeAllViews();
+
+        // ========================================================
+        // LOADING VIEW
+        // ========================================================
+
+        TextView loading =
+                new TextView(this);
+
+        loading.setText(
+                "Loading your trusted people..."
+        );
+
+        loading.setTextSize(14);
+
+        loading.setTextColor(
+                GREY_TEXT
+        );
+
+        loading.setGravity(
+                Gravity.CENTER
+        );
+
+        loading.setPadding(
+                dpToPx(20),
+                dpToPx(50),
+                dpToPx(20),
+                dpToPx(50)
+        );
+
+        contactsContainer.addView(
+                loading
+        );
+
+        // IMPORTANT:
+        // This view was created dynamically, so BaseActivity
+        // cannot translate it automatically.
+        translateNewView(loading);
+
+        // ========================================================
+        // FIRESTORE
+        // ========================================================
+
+        db.collection("users")
+                .document(userUid)
+                .collection("guardians")
+                .get()
+
+                .addOnSuccessListener(
+                        queryDocumentSnapshots -> {
+
+                            contactsContainer.removeAllViews();
+
+                            if (queryDocumentSnapshots.isEmpty()) {
+
+                                showEmptyMessage();
+
+                                return;
+                            }
+
+                            for (DocumentSnapshot document :
+                                    queryDocumentSnapshots.getDocuments()) {
+
+                                addContactCard(
+                                        document
+                                );
+                            }
+                        }
+                )
+
+                .addOnFailureListener(
+                        e -> {
+
+                            contactsContainer.removeAllViews();
+
+                            showEmptyMessage();
+
+                            showTranslatedToast(
+                                    "Could not load trusted contacts:\n"
+                                            + e.getMessage(),
+                                    Toast.LENGTH_LONG
+                            );
+                        }
+                );
+    }
+
+
+    // ============================================================
+    // ADD / EDIT DIALOG
     // ============================================================
 
     private void showAddContactDialog(
-            int position
+            DocumentSnapshot existingDocument
     ) {
 
         View dialogView =
@@ -138,7 +279,6 @@ public class TrustedContactsActivity extends BaseActivity {
 
         // ========================================================
         // FORM FIELDS
-        // SAME IDs AS SIGNUP
         // ========================================================
 
         EditText etGuardianName =
@@ -171,10 +311,6 @@ public class TrustedContactsActivity extends BaseActivity {
                         R.id.etGuardianAddress
                 );
 
-        // ========================================================
-        // CUSTOM XML BUTTONS
-        // ========================================================
-
         MaterialButton btnCancel =
                 dialogView.findViewById(
                         R.id.btnCancel
@@ -198,11 +334,10 @@ public class TrustedContactsActivity extends BaseActivity {
                 btnCancel == null ||
                 btnSave == null) {
 
-            Toast.makeText(
-                    this,
+            showTranslatedToast(
                     "Trusted contact form IDs are incomplete",
                     Toast.LENGTH_LONG
-            ).show();
+            );
 
             return;
         }
@@ -284,93 +419,46 @@ public class TrustedContactsActivity extends BaseActivity {
 
         // ========================================================
         // EDIT MODE
-        // LOAD EXISTING DATA
         // ========================================================
 
-        if (position >= 0) {
+        boolean isEdit =
+                existingDocument != null;
 
-            try {
+        if (isEdit) {
 
-                String existing =
-                        preferences.getString(
-                                CONTACTS_KEY,
-                                "[]"
-                        );
+            etGuardianName.setText(
+                    existingDocument.getString("name")
+            );
 
-                JSONArray contacts =
-                        new JSONArray(existing);
+            etGuardianRelation.setText(
+                    existingDocument.getString("relation"),
+                    false
+            );
 
-                if (position < contacts.length()) {
+            etGuardianMobile.setText(
+                    existingDocument.getString("mobile")
+            );
 
-                    JSONObject contact =
-                            contacts.getJSONObject(
-                                    position
-                            );
+            etGuardianBloodGroup.setText(
+                    existingDocument.getString("bloodGroup"),
+                    false
+            );
 
-                    etGuardianName.setText(
-                            contact.optString(
-                                    "name",
-                                    ""
-                            )
-                    );
+            etGuardianEmail.setText(
+                    existingDocument.getString("email")
+            );
 
-                    etGuardianRelation.setText(
-                            contact.optString(
-                                    "relation",
-                                    ""
-                            ),
-                            false
-                    );
+            etGuardianAddress.setText(
+                    existingDocument.getString("address")
+            );
 
-                    etGuardianMobile.setText(
-                            contact.optString(
-                                    "mobile",
-                                    ""
-                            )
-                    );
-
-                    etGuardianBloodGroup.setText(
-                            contact.optString(
-                                    "bloodGroup",
-                                    ""
-                            ),
-                            false
-                    );
-
-                    etGuardianEmail.setText(
-                            contact.optString(
-                                    "email",
-                                    ""
-                            )
-                    );
-
-                    etGuardianAddress.setText(
-                            contact.optString(
-                                    "address",
-                                    ""
-                            )
-                    );
-
-                    btnSave.setText(
-                            "Update Contact"
-                    );
-                }
-
-            } catch (Exception e) {
-
-                e.printStackTrace();
-
-                Toast.makeText(
-                        this,
-                        "Could not load contact details",
-                        Toast.LENGTH_SHORT
-                ).show();
-            }
+            btnSave.setText(
+                    "Update Contact"
+            );
         }
 
         // ========================================================
         // CREATE DIALOG
-        // ONLY XML BUTTONS
         // ========================================================
 
         AlertDialog dialog =
@@ -379,6 +467,18 @@ public class TrustedContactsActivity extends BaseActivity {
                         .create();
 
         dialog.setCanceledOnTouchOutside(false);
+
+        // ========================================================
+        // SHOW DIALOG
+        // ========================================================
+
+        dialog.show();
+
+        // ========================================================
+        // TRANSLATE DIALOG
+        // ========================================================
+
+        translateNewView(dialogView);
 
         // ========================================================
         // CANCEL
@@ -392,185 +492,195 @@ public class TrustedContactsActivity extends BaseActivity {
         // SAVE / UPDATE
         // ========================================================
 
-        btnSave.setOnClickListener(v -> {
+        btnSave.setOnClickListener(
+                v -> {
 
-            String name =
-                    etGuardianName
-                            .getText()
-                            .toString()
-                            .trim();
+                    String name =
+                            etGuardianName
+                                    .getText()
+                                    .toString()
+                                    .trim();
 
-            String relation =
-                    etGuardianRelation
-                            .getText()
-                            .toString()
-                            .trim();
+                    String relation =
+                            etGuardianRelation
+                                    .getText()
+                                    .toString()
+                                    .trim();
 
-            String mobile =
-                    etGuardianMobile
-                            .getText()
-                            .toString()
-                            .trim();
+                    String mobile =
+                            etGuardianMobile
+                                    .getText()
+                                    .toString()
+                                    .trim();
 
-            String bloodGroup =
-                    etGuardianBloodGroup
-                            .getText()
-                            .toString()
-                            .trim();
+                    String bloodGroup =
+                            etGuardianBloodGroup
+                                    .getText()
+                                    .toString()
+                                    .trim();
 
-            String email =
-                    etGuardianEmail
-                            .getText()
-                            .toString()
-                            .trim();
+                    String email =
+                            etGuardianEmail
+                                    .getText()
+                                    .toString()
+                                    .trim();
 
-            String address =
-                    etGuardianAddress
-                            .getText()
-                            .toString()
-                            .trim();
+                    String address =
+                            etGuardianAddress
+                                    .getText()
+                                    .toString()
+                                    .trim();
 
-            // ====================================================
-            // NAME VALIDATION
-            // ====================================================
+                    // =================================================
+                    // NAME
+                    // =================================================
 
-            if (name.isEmpty()) {
+                    if (name.isEmpty()) {
 
-                etGuardianName.setError(
-                        "Please enter full name"
-                );
+                        etGuardianName.setError(
+                                getTranslatedString(
+                                        "Please enter full name"
+                                )
+                        );
 
-                etGuardianName.requestFocus();
+                        etGuardianName.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            if (!name.matches(
-                    "^[a-zA-Z][a-zA-Z .'-]{1,49}$"
-            )) {
+                    if (!name.matches(
+                            "^[a-zA-Z][a-zA-Z .'-]{1,49}$"
+                    )) {
 
-                etGuardianName.setError(
-                        "Please enter a valid name"
-                );
+                        etGuardianName.setError(
+                                getTranslatedString(
+                                        "Please enter a valid name"
+                                )
+                        );
 
-                etGuardianName.requestFocus();
+                        etGuardianName.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            // ====================================================
-            // RELATION VALIDATION
-            // ====================================================
+                    // =================================================
+                    // RELATION
+                    // =================================================
 
-            if (relation.isEmpty()) {
+                    if (relation.isEmpty()) {
 
-                etGuardianRelation.setError(
-                        "Please select relationship"
-                );
+                        etGuardianRelation.setError(
+                                getTranslatedString(
+                                        "Please select relationship"
+                                )
+                        );
 
-                etGuardianRelation.requestFocus();
+                        etGuardianRelation.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            // ====================================================
-            // MOBILE VALIDATION
-            // ====================================================
+                    // =================================================
+                    // MOBILE
+                    // =================================================
 
-            if (mobile.isEmpty()) {
+                    if (mobile.isEmpty()) {
 
-                etGuardianMobile.setError(
-                        "Please enter mobile number"
-                );
+                        etGuardianMobile.setError(
+                                getTranslatedString(
+                                        "Please enter mobile number"
+                                )
+                        );
 
-                etGuardianMobile.requestFocus();
+                        etGuardianMobile.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            if (!mobile.matches(
-                    "^[6-9][0-9]{9}$"
-            )) {
+                    if (!mobile.matches(
+                            "^[6-9][0-9]{9}$"
+                    )) {
 
-                etGuardianMobile.setError(
-                        "Enter a valid 10-digit mobile number"
-                );
+                        etGuardianMobile.setError(
+                                getTranslatedString(
+                                        "Enter a valid 10-digit mobile number"
+                                )
+                        );
 
-                etGuardianMobile.requestFocus();
+                        etGuardianMobile.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            // ====================================================
-            // BLOOD GROUP VALIDATION
-            // ====================================================
+                    // =================================================
+                    // BLOOD GROUP
+                    // =================================================
 
-            if (bloodGroup.isEmpty()) {
+                    if (bloodGroup.isEmpty()) {
 
-                etGuardianBloodGroup.setError(
-                        "Please select blood group"
-                );
+                        etGuardianBloodGroup.setError(
+                                getTranslatedString(
+                                        "Please select blood group"
+                                )
+                        );
 
-                etGuardianBloodGroup.requestFocus();
+                        etGuardianBloodGroup.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            // ====================================================
-            // EMAIL VALIDATION
-            // ====================================================
+                    // =================================================
+                    // EMAIL
+                    // =================================================
 
-            if (!email.isEmpty()
-                    && !android.util.Patterns
-                    .EMAIL_ADDRESS
-                    .matcher(email)
-                    .matches()) {
+                    if (!email.isEmpty()
+                            && !android.util.Patterns
+                            .EMAIL_ADDRESS
+                            .matcher(email)
+                            .matches()) {
 
-                etGuardianEmail.setError(
-                        "Enter a valid email address"
-                );
+                        etGuardianEmail.setError(
+                                getTranslatedString(
+                                        "Enter a valid email address"
+                                )
+                        );
 
-                etGuardianEmail.requestFocus();
+                        etGuardianEmail.requestFocus();
 
-                return;
-            }
+                        return;
+                    }
 
-            // ====================================================
-            // ADD OR UPDATE
-            // ====================================================
+                    // =================================================
+                    // SAVE OR UPDATE
+                    // =================================================
 
-            if (position >= 0) {
+                    if (isEdit) {
 
-                updateContact(
-                        position,
-                        name,
-                        relation,
-                        mobile,
-                        bloodGroup,
-                        email,
-                        address
-                );
+                        updateContact(
+                                existingDocument.getId(),
+                                name,
+                                relation,
+                                mobile,
+                                bloodGroup,
+                                email,
+                                address,
+                                dialog
+                        );
 
-            } else {
+                    } else {
 
-                saveContact(
-                        name,
-                        relation,
-                        mobile,
-                        bloodGroup,
-                        email,
-                        address
-                );
-            }
-
-            dialog.dismiss();
-        });
-
-        // ========================================================
-        // SHOW DIALOG
-        // ========================================================
-
-        dialog.show();
+                        saveContact(
+                                name,
+                                relation,
+                                mobile,
+                                bloodGroup,
+                                email,
+                                address,
+                                dialog
+                        );
+                    }
+                }
+        );
 
         // ========================================================
         // DIALOG SIZE
@@ -598,6 +708,7 @@ public class TrustedContactsActivity extends BaseActivity {
         }
     }
 
+
     // ============================================================
     // SAVE CONTACT
     // ============================================================
@@ -608,258 +719,177 @@ public class TrustedContactsActivity extends BaseActivity {
             String mobile,
             String bloodGroup,
             String email,
-            String address
+            String address,
+            AlertDialog dialog
     ) {
 
-        try {
+        Map<String, Object> guardianData =
+                new HashMap<>();
 
-            String existing =
-                    preferences.getString(
-                            CONTACTS_KEY,
-                            "[]"
-                    );
+        guardianData.put(
+                "name",
+                name
+        );
 
-            JSONArray contacts =
-                    new JSONArray(existing);
+        guardianData.put(
+                "relation",
+                relation
+        );
 
-            JSONObject contact =
-                    new JSONObject();
+        guardianData.put(
+                "mobile",
+                mobile
+        );
 
-            contact.put("name", name);
-            contact.put("relation", relation);
-            contact.put("mobile", mobile);
-            contact.put("bloodGroup", bloodGroup);
-            contact.put("email", email);
-            contact.put("address", address);
+        guardianData.put(
+                "bloodGroup",
+                bloodGroup
+        );
 
-            contacts.put(contact);
+        guardianData.put(
+                "email",
+                email
+        );
 
-            preferences.edit()
-                    .putString(
-                            CONTACTS_KEY,
-                            contacts.toString()
-                    )
-                    .apply();
+        guardianData.put(
+                "address",
+                address
+        );
 
-            loadContacts();
+        guardianData.put(
+                "createdAt",
+                System.currentTimeMillis()
+        );
 
-            Toast.makeText(
-                    this,
-                    "Trusted contact added successfully ❤️",
-                    Toast.LENGTH_SHORT
-            ).show();
+        db.collection("users")
+                .document(userUid)
+                .collection("guardians")
+                .add(guardianData)
 
-        } catch (Exception e) {
+                .addOnSuccessListener(
+                        documentReference -> {
 
-            e.printStackTrace();
+                            dialog.dismiss();
 
-            Toast.makeText(
-                    this,
-                    "Could not save contact",
-                    Toast.LENGTH_SHORT
-            ).show();
-        }
+                            showTranslatedToast(
+                                    "Trusted contact added ❤️",
+                                    Toast.LENGTH_SHORT
+                            );
+
+                            loadContactsFromFirestore();
+                        }
+                )
+
+                .addOnFailureListener(
+                        e -> {
+
+                            showTranslatedToast(
+                                    "Could not save contact:\n"
+                                            + e.getMessage(),
+                                    Toast.LENGTH_LONG
+                            );
+                        }
+                );
     }
+
 
     // ============================================================
     // UPDATE CONTACT
     // ============================================================
 
     private void updateContact(
-            int position,
+            String guardianId,
             String name,
             String relation,
             String mobile,
             String bloodGroup,
             String email,
-            String address
+            String address,
+            AlertDialog dialog
     ) {
 
-        try {
+        Map<String, Object> guardianData =
+                new HashMap<>();
 
-            String existing =
-                    preferences.getString(
-                            CONTACTS_KEY,
-                            "[]"
-                    );
+        guardianData.put(
+                "name",
+                name
+        );
 
-            JSONArray contacts =
-                    new JSONArray(existing);
+        guardianData.put(
+                "relation",
+                relation
+        );
 
-            if (position < 0 ||
-                    position >= contacts.length()) {
+        guardianData.put(
+                "mobile",
+                mobile
+        );
 
-                Toast.makeText(
-                        this,
-                        "Contact not found",
-                        Toast.LENGTH_SHORT
-                ).show();
+        guardianData.put(
+                "bloodGroup",
+                bloodGroup
+        );
 
-                return;
-            }
+        guardianData.put(
+                "email",
+                email
+        );
 
-            JSONObject updatedContact =
-                    new JSONObject();
+        guardianData.put(
+                "address",
+                address
+        );
 
-            updatedContact.put(
-                    "name",
-                    name
-            );
+        guardianData.put(
+                "updatedAt",
+                System.currentTimeMillis()
+        );
 
-            updatedContact.put(
-                    "relation",
-                    relation
-            );
+        db.collection("users")
+                .document(userUid)
+                .collection("guardians")
+                .document(guardianId)
+                .update(guardianData)
 
-            updatedContact.put(
-                    "mobile",
-                    mobile
-            );
+                .addOnSuccessListener(
+                        unused -> {
 
-            updatedContact.put(
-                    "bloodGroup",
-                    bloodGroup
-            );
+                            dialog.dismiss();
 
-            updatedContact.put(
-                    "email",
-                    email
-            );
+                            showTranslatedToast(
+                                    "Trusted contact updated ❤️",
+                                    Toast.LENGTH_SHORT
+                            );
 
-            updatedContact.put(
-                    "address",
-                    address
-            );
+                            loadContactsFromFirestore();
+                        }
+                )
 
-            contacts.put(
-                    position,
-                    updatedContact
-            );
+                .addOnFailureListener(
+                        e -> {
 
-            preferences.edit()
-                    .putString(
-                            CONTACTS_KEY,
-                            contacts.toString()
-                    )
-                    .apply();
-
-            loadContacts();
-
-            Toast.makeText(
-                    this,
-                    "Trusted contact updated ❤️",
-                    Toast.LENGTH_SHORT
-            ).show();
-
-        } catch (Exception e) {
-
-            e.printStackTrace();
-
-            Toast.makeText(
-                    this,
-                    "Could not update contact",
-                    Toast.LENGTH_SHORT
-            ).show();
-        }
-    }
-
-    // ============================================================
-    // LOAD CONTACTS
-    // ============================================================
-
-    private void loadContacts() {
-
-        if (contactsContainer == null) {
-            return;
-        }
-
-        contactsContainer.removeAllViews();
-
-        try {
-
-            String existing =
-                    preferences.getString(
-                            CONTACTS_KEY,
-                            "[]"
-                    );
-
-            JSONArray contacts =
-                    new JSONArray(existing);
-
-            if (contacts.length() == 0) {
-
-                showEmptyMessage();
-
-                return;
-            }
-
-            for (int i = 0;
-                 i < contacts.length();
-                 i++) {
-
-                JSONObject contact =
-                        contacts.getJSONObject(i);
-
-                addContactCard(
-                        contact,
-                        i
+                            showTranslatedToast(
+                                    "Could not update contact:\n"
+                                            + e.getMessage(),
+                                    Toast.LENGTH_LONG
+                            );
+                        }
                 );
-            }
-
-        } catch (Exception e) {
-
-            e.printStackTrace();
-
-            showEmptyMessage();
-        }
     }
 
-    // ============================================================
-    // EMPTY STATE
-    // ============================================================
-
-    private void showEmptyMessage() {
-
-        TextView empty =
-                new TextView(this);
-
-        empty.setText(
-                "♡\n\n" +
-                        "No trusted contacts yet\n\n" +
-                        "Add people you trust so they can\n" +
-                        "receive help alerts during an emergency."
-        );
-
-        empty.setTextColor(
-                GREY_TEXT
-        );
-
-        empty.setTextSize(14);
-
-        empty.setGravity(
-                Gravity.CENTER
-        );
-
-        empty.setPadding(
-                dpToPx(30),
-                dpToPx(70),
-                dpToPx(30),
-                dpToPx(70)
-        );
-
-        contactsContainer.addView(
-                empty
-        );
-    }
 
     // ============================================================
-    // CONTACT CARD
+    // CREATE CONTACT CARD
     // ============================================================
 
     private void addContactCard(
-            JSONObject contact,
-            int position
+            DocumentSnapshot contact
     ) {
+
+        // ========================================================
+        // OUTER CARD
+        // ========================================================
 
         CardView card =
                 new CardView(this);
@@ -877,14 +907,16 @@ public class TrustedContactsActivity extends BaseActivity {
                 dpToPx(16)
         );
 
-        card.setLayoutParams(cardParams);
+        card.setLayoutParams(
+                cardParams
+        );
 
         card.setRadius(
-                dpToPx(22)
+                dpToPx(24)
         );
 
         card.setCardElevation(
-                dpToPx(3)
+                dpToPx(4)
         );
 
         card.setCardBackgroundColor(
@@ -908,13 +940,13 @@ public class TrustedContactsActivity extends BaseActivity {
 
         mainLayout.setPadding(
                 dpToPx(18),
-                dpToPx(16),
+                dpToPx(18),
                 dpToPx(18),
                 dpToPx(16)
         );
 
         // ========================================================
-        // HEADER
+        // CONTACT HEADER
         // ========================================================
 
         LinearLayout headerRow =
@@ -929,19 +961,36 @@ public class TrustedContactsActivity extends BaseActivity {
         );
 
         // ========================================================
-        // AVATAR
+        // AVATAR CIRCLE
         // ========================================================
+
+        CardView avatarCard =
+                new CardView(this);
+
+        avatarCard.setRadius(
+                dpToPx(30)
+        );
+
+        avatarCard.setCardElevation(
+                0
+        );
+
+        avatarCard.setCardBackgroundColor(
+                LIGHT_PINK
+        );
 
         TextView avatar =
                 new TextView(this);
 
         String contactName =
-                contact.optString(
+                getSafeString(
+                        contact,
                         "name",
                         "?"
                 );
 
-        String initial = "?";
+        String initial =
+                "?";
 
         if (!contactName.isEmpty()) {
 
@@ -951,14 +1000,16 @@ public class TrustedContactsActivity extends BaseActivity {
                             .toUpperCase();
         }
 
-        avatar.setText(initial);
+        avatar.setText(
+                initial
+        );
 
         avatar.setTextColor(
-                WHITE
+                PINK
         );
 
         avatar.setTextSize(
-                22
+                23
         );
 
         avatar.setTypeface(
@@ -970,29 +1021,29 @@ public class TrustedContactsActivity extends BaseActivity {
                 Gravity.CENTER
         );
 
-        avatar.setBackgroundColor(
-                PINK
+        avatarCard.addView(
+                avatar
         );
 
         LinearLayout.LayoutParams avatarParams =
                 new LinearLayout.LayoutParams(
-                        dpToPx(54),
-                        dpToPx(54)
+                        dpToPx(60),
+                        dpToPx(60)
                 );
 
         avatarParams.rightMargin =
                 dpToPx(14);
 
-        avatar.setLayoutParams(
+        avatarCard.setLayoutParams(
                 avatarParams
         );
 
         headerRow.addView(
-                avatar
+                avatarCard
         );
 
         // ========================================================
-        // NAME + RELATION
+        // NAME / RELATION
         // ========================================================
 
         LinearLayout nameLayout =
@@ -1020,12 +1071,12 @@ public class TrustedContactsActivity extends BaseActivity {
                 contactName
         );
 
-        name.setTextSize(
-                18
-        );
-
         name.setTextColor(
                 DARK_TEXT
+        );
+
+        name.setTextSize(
+                19
         );
 
         name.setTypeface(
@@ -1041,11 +1092,11 @@ public class TrustedContactsActivity extends BaseActivity {
                 new TextView(this);
 
         relation.setText(
-                "♡  " +
-                        contact.optString(
-                                "relation",
-                                "Trusted Contact"
-                        )
+                getSafeString(
+                        contact,
+                        "relation",
+                        "Trusted Contact"
+                )
         );
 
         relation.setTextColor(
@@ -1054,6 +1105,11 @@ public class TrustedContactsActivity extends BaseActivity {
 
         relation.setTextSize(
                 12
+        );
+
+        relation.setTypeface(
+                null,
+                Typeface.BOLD
         );
 
         relation.setPadding(
@@ -1076,6 +1132,88 @@ public class TrustedContactsActivity extends BaseActivity {
         );
 
         // ========================================================
+        // SMALL TRUST BADGE
+        // ========================================================
+
+        CardView trustedBadge =
+                new CardView(this);
+
+        trustedBadge.setRadius(
+                dpToPx(12)
+        );
+
+        trustedBadge.setCardElevation(
+                0
+        );
+
+        trustedBadge.setCardBackgroundColor(
+                VERY_LIGHT_PINK
+        );
+
+        LinearLayout badgeLayout =
+                new LinearLayout(this);
+
+        badgeLayout.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
+
+        badgeLayout.setGravity(
+                Gravity.CENTER_VERTICAL
+        );
+
+        badgeLayout.setPadding(
+                dpToPx(10),
+                dpToPx(6),
+                dpToPx(10),
+                dpToPx(6)
+        );
+
+        TextView badgeText =
+                new TextView(this);
+
+        badgeText.setText(
+                "♥  TRUSTED CONTACT"
+        );
+
+        badgeText.setTextColor(
+                DARK_PINK
+        );
+
+        badgeText.setTextSize(
+                9
+        );
+
+        badgeText.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        badgeLayout.addView(
+                badgeText
+        );
+
+        trustedBadge.addView(
+                badgeLayout
+        );
+
+        LinearLayout.LayoutParams badgeParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        badgeParams.topMargin =
+                dpToPx(12);
+
+        trustedBadge.setLayoutParams(
+                badgeParams
+        );
+
+        mainLayout.addView(
+                trustedBadge
+        );
+
+        // ========================================================
         // DIVIDER
         // ========================================================
 
@@ -1092,14 +1230,14 @@ public class TrustedContactsActivity extends BaseActivity {
                 dpToPx(14);
 
         dividerParams.bottomMargin =
-                dpToPx(10);
+                dpToPx(8);
 
         divider.setLayoutParams(
                 dividerParams
         );
 
         divider.setBackgroundColor(
-                SOFT_PINK
+                BORDER
         );
 
         mainLayout.addView(
@@ -1107,16 +1245,53 @@ public class TrustedContactsActivity extends BaseActivity {
         );
 
         // ========================================================
+        // CONTACT DETAILS TITLE
+        // ========================================================
+
+        TextView detailsTitle =
+                new TextView(this);
+
+        detailsTitle.setText(
+                "CONTACT DETAILS"
+        );
+
+        detailsTitle.setTextColor(
+                DARK_PINK
+        );
+
+        detailsTitle.setTextSize(
+                10
+        );
+
+        detailsTitle.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        detailsTitle.setPadding(
+                0,
+                dpToPx(3),
+                0,
+                dpToPx(7)
+        );
+
+        mainLayout.addView(
+                detailsTitle
+        );
+
+        // ========================================================
         // MOBILE
         // ========================================================
 
         mainLayout.addView(
-                createDetailText(
-                        "📞  " +
-                                contact.optString(
-                                        "mobile",
-                                        "-"
-                                )
+                createDetailBox(
+                        "📞",
+                        "Mobile Number",
+                        getSafeString(
+                                contact,
+                                "mobile",
+                                "-"
+                        )
                 )
         );
 
@@ -1125,12 +1300,14 @@ public class TrustedContactsActivity extends BaseActivity {
         // ========================================================
 
         mainLayout.addView(
-                createDetailText(
-                        "🩸  Blood Group: " +
-                                contact.optString(
-                                        "bloodGroup",
-                                        "-"
-                                )
+                createDetailBox(
+                        "🩸",
+                        "Blood Group",
+                        getSafeString(
+                                contact,
+                                "bloodGroup",
+                                "-"
+                        )
                 )
         );
 
@@ -1139,7 +1316,8 @@ public class TrustedContactsActivity extends BaseActivity {
         // ========================================================
 
         String email =
-                contact.optString(
+                getSafeString(
+                        contact,
                         "email",
                         ""
                 );
@@ -1147,8 +1325,10 @@ public class TrustedContactsActivity extends BaseActivity {
         if (!email.isEmpty()) {
 
             mainLayout.addView(
-                    createDetailText(
-                            "✉  " + email
+                    createDetailBox(
+                            "✉",
+                            "Email",
+                            email
                     )
             );
         }
@@ -1158,7 +1338,8 @@ public class TrustedContactsActivity extends BaseActivity {
         // ========================================================
 
         String address =
-                contact.optString(
+                getSafeString(
+                        contact,
                         "address",
                         ""
                 );
@@ -1166,14 +1347,51 @@ public class TrustedContactsActivity extends BaseActivity {
         if (!address.isEmpty()) {
 
             mainLayout.addView(
-                    createDetailText(
-                            "📍  " + address
+                    createDetailBox(
+                            "📍",
+                            "Address",
+                            address
                     )
             );
         }
 
         // ========================================================
-        // ACTION BUTTON ROW
+        // ACTION LABEL
+        // ========================================================
+
+        TextView actionTitle =
+                new TextView(this);
+
+        actionTitle.setText(
+                "MANAGE CONTACT"
+        );
+
+        actionTitle.setTextColor(
+                GREY_TEXT
+        );
+
+        actionTitle.setTextSize(
+                9
+        );
+
+        actionTitle.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        actionTitle.setPadding(
+                0,
+                dpToPx(14),
+                0,
+                dpToPx(7)
+        );
+
+        mainLayout.addView(
+                actionTitle
+        );
+
+        // ========================================================
+        // BUTTON ROW
         // ========================================================
 
         LinearLayout buttonRow =
@@ -1184,14 +1402,7 @@ public class TrustedContactsActivity extends BaseActivity {
         );
 
         buttonRow.setGravity(
-                Gravity.END
-        );
-
-        buttonRow.setPadding(
-                0,
-                dpToPx(12),
-                0,
-                0
+                Gravity.CENTER_VERTICAL
         );
 
         // ========================================================
@@ -1202,7 +1413,7 @@ public class TrustedContactsActivity extends BaseActivity {
                 new MaterialButton(this);
 
         editButton.setText(
-                "✏ Edit"
+                "✏  Edit Contact"
         );
 
         editButton.setTextSize(
@@ -1218,7 +1429,7 @@ public class TrustedContactsActivity extends BaseActivity {
         );
 
         editButton.setCornerRadius(
-                dpToPx(12)
+                dpToPx(14)
         );
 
         editButton.setStrokeWidth(
@@ -1239,12 +1450,13 @@ public class TrustedContactsActivity extends BaseActivity {
 
         LinearLayout.LayoutParams editParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        dpToPx(42)
+                        0,
+                        dpToPx(46),
+                        1f
                 );
 
         editParams.rightMargin =
-                dpToPx(8);
+                dpToPx(5);
 
         editButton.setLayoutParams(
                 editParams
@@ -1252,7 +1464,7 @@ public class TrustedContactsActivity extends BaseActivity {
 
         editButton.setOnClickListener(
                 v -> showAddContactDialog(
-                        position
+                        contact
                 )
         );
 
@@ -1284,7 +1496,7 @@ public class TrustedContactsActivity extends BaseActivity {
         );
 
         removeButton.setCornerRadius(
-                dpToPx(12)
+                dpToPx(14)
         );
 
         removeButton.setStrokeWidth(
@@ -1305,9 +1517,13 @@ public class TrustedContactsActivity extends BaseActivity {
 
         LinearLayout.LayoutParams removeParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        dpToPx(42)
+                        0,
+                        dpToPx(46),
+                        0.65f
                 );
+
+        removeParams.leftMargin =
+                dpToPx(5);
 
         removeButton.setLayoutParams(
                 removeParams
@@ -1315,7 +1531,7 @@ public class TrustedContactsActivity extends BaseActivity {
 
         removeButton.setOnClickListener(
                 v -> confirmDelete(
-                        position
+                        contact.getId()
                 )
         );
 
@@ -1327,6 +1543,10 @@ public class TrustedContactsActivity extends BaseActivity {
                 buttonRow
         );
 
+        // ========================================================
+        // ADD MAIN CONTENT TO CARD
+        // ========================================================
+
         card.addView(
                 mainLayout
         );
@@ -1334,67 +1554,508 @@ public class TrustedContactsActivity extends BaseActivity {
         contactsContainer.addView(
                 card
         );
+
+        // ========================================================
+        // IMPORTANT
+        // ========================================================
+        // This card is created AFTER BaseActivity's normal
+        // translation scan.
+        //
+        // Therefore we manually translate the complete card.
+        // ========================================================
+
+        translateNewView(card);
     }
 
+
     // ============================================================
-    // DETAIL TEXT
+    // DETAIL BOX
     // ============================================================
 
-    private TextView createDetailText(
-            String text
+    private View createDetailBox(
+            String icon,
+            String title,
+            String value
     ) {
 
-        TextView view =
+        CardView box =
+                new CardView(this);
+
+        box.setRadius(
+                dpToPx(14)
+        );
+
+        box.setCardElevation(
+                0
+        );
+
+        box.setCardBackgroundColor(
+                VERY_LIGHT_PINK
+        );
+
+        LinearLayout.LayoutParams boxParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        boxParams.setMargins(
+                0,
+                dpToPx(4),
+                0,
+                dpToPx(4)
+        );
+
+        box.setLayoutParams(
+                boxParams
+        );
+
+        LinearLayout row =
+                new LinearLayout(this);
+
+        row.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
+
+        row.setGravity(
+                Gravity.CENTER_VERTICAL
+        );
+
+        row.setPadding(
+                dpToPx(12),
+                dpToPx(9),
+                dpToPx(12),
+                dpToPx(9)
+        );
+
+        // ========================================================
+        // ICON
+        // ========================================================
+
+        TextView iconView =
                 new TextView(this);
 
-        view.setText(
-                text
+        iconView.setText(
+                icon
         );
 
-        view.setTextSize(
-                13
+        iconView.setTextSize(
+                17
         );
 
-        view.setTextColor(
+        iconView.setGravity(
+                Gravity.CENTER
+        );
+
+        LinearLayout.LayoutParams iconParams =
+                new LinearLayout.LayoutParams(
+                        dpToPx(32),
+                        dpToPx(32)
+                );
+
+        iconParams.rightMargin =
+                dpToPx(10);
+
+        iconView.setLayoutParams(
+                iconParams
+        );
+
+        row.addView(
+                iconView
+        );
+
+        // ========================================================
+        // TEXT
+        // ========================================================
+
+        LinearLayout textLayout =
+                new LinearLayout(this);
+
+        textLayout.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        LinearLayout.LayoutParams textParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1f
+                );
+
+        textLayout.setLayoutParams(
+                textParams
+        );
+
+        TextView titleView =
+                new TextView(this);
+
+        titleView.setText(
+                title
+        );
+
+        titleView.setTextColor(
                 GREY_TEXT
         );
 
-        view.setPadding(
-                0,
-                dpToPx(5),
-                0,
-                dpToPx(5)
+        titleView.setTextSize(
+                9
         );
 
-        return view;
+        titleView.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        textLayout.addView(
+                titleView
+        );
+
+        TextView valueView =
+                new TextView(this);
+
+        valueView.setText(
+                value
+        );
+
+        valueView.setTextColor(
+                DARK_TEXT
+        );
+
+        valueView.setTextSize(
+                13
+        );
+
+        valueView.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        valueView.setPadding(
+                0,
+                dpToPx(2),
+                0,
+                0
+        );
+
+        textLayout.addView(
+                valueView
+        );
+
+        row.addView(
+                textLayout
+        );
+
+        box.addView(
+                row
+        );
+
+        return box;
     }
+
+
+    // ============================================================
+    // SAFE STRING
+    // ============================================================
+
+    private String getSafeString(
+            DocumentSnapshot document,
+            String field,
+            String defaultValue
+    ) {
+
+        String value =
+                document.getString(field);
+
+        if (value == null) {
+            return defaultValue;
+        }
+
+        return value;
+    }
+
+
+    // ============================================================
+    // EMPTY STATE
+    // ============================================================
+
+    private void showEmptyMessage() {
+
+        CardView card =
+                new CardView(this);
+
+        card.setRadius(
+                dpToPx(24)
+        );
+
+        card.setCardElevation(
+                dpToPx(3)
+        );
+
+        card.setCardBackgroundColor(
+                WHITE
+        );
+
+        LinearLayout.LayoutParams cardParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        card.setLayoutParams(
+                cardParams
+        );
+
+        LinearLayout layout =
+                new LinearLayout(this);
+
+        layout.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        layout.setGravity(
+                Gravity.CENTER
+        );
+
+        layout.setPadding(
+                dpToPx(25),
+                dpToPx(35),
+                dpToPx(25),
+                dpToPx(35)
+        );
+
+        // ========================================================
+        // ICON
+        // ========================================================
+
+        CardView iconCard =
+                new CardView(this);
+
+        iconCard.setRadius(
+                dpToPx(40)
+        );
+
+        iconCard.setCardElevation(
+                0
+        );
+
+        iconCard.setCardBackgroundColor(
+                LIGHT_PINK
+        );
+
+        TextView icon =
+                new TextView(this);
+
+        icon.setText(
+                "♥"
+        );
+
+        icon.setTextColor(
+                PINK
+        );
+
+        icon.setTextSize(
+                31
+        );
+
+        icon.setGravity(
+                Gravity.CENTER
+        );
+
+        iconCard.addView(
+                icon
+        );
+
+        layout.addView(
+                iconCard,
+                new LinearLayout.LayoutParams(
+                        dpToPx(80),
+                        dpToPx(80)
+                )
+        );
+
+        // ========================================================
+        // TITLE
+        // ========================================================
+
+        TextView title =
+                new TextView(this);
+
+        title.setText(
+                "No trusted contacts yet"
+        );
+
+        title.setTextColor(
+                DARK_TEXT
+        );
+
+        title.setTextSize(
+                18
+        );
+
+        title.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        title.setGravity(
+                Gravity.CENTER
+        );
+
+        LinearLayout.LayoutParams titleParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        titleParams.topMargin =
+                dpToPx(17);
+
+        title.setLayoutParams(
+                titleParams
+        );
+
+        layout.addView(
+                title
+        );
+
+        // ========================================================
+        // DESCRIPTION
+        // ========================================================
+
+        TextView description =
+                new TextView(this);
+
+        description.setText(
+                "Add family members or friends you trust.\n"
+                        + "They can be contacted quickly during an emergency."
+        );
+
+        description.setTextColor(
+                GREY_TEXT
+        );
+
+        description.setTextSize(
+                12
+        );
+
+        description.setGravity(
+                Gravity.CENTER
+        );
+
+        description.setLineSpacing(
+                dpToPx(2),
+                1f
+        );
+
+        LinearLayout.LayoutParams descParams =
+                new LinearLayout.LayoutParams(
+                        dpToPx(290),
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        descParams.topMargin =
+                dpToPx(8);
+
+        description.setLayoutParams(
+                descParams
+        );
+
+        layout.addView(
+                description
+        );
+
+        // ========================================================
+        // FOOTER
+        // ========================================================
+
+        TextView footer =
+                new TextView(this);
+
+        footer.setText(
+                "♥  Your safety circle can include as many contacts as needed."
+        );
+
+        footer.setTextColor(
+                DARK_PINK
+        );
+
+        footer.setTextSize(
+                10
+        );
+
+        footer.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        footer.setGravity(
+                Gravity.CENTER
+        );
+
+        LinearLayout.LayoutParams footerParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        footerParams.topMargin =
+                dpToPx(18);
+
+        footer.setLayoutParams(
+                footerParams
+        );
+
+        layout.addView(
+                footer
+        );
+
+        card.addView(
+                layout
+        );
+
+        contactsContainer.addView(
+                card
+        );
+
+        // Translate dynamically created empty state
+        translateNewView(card);
+    }
+
 
     // ============================================================
     // DELETE CONFIRMATION
     // ============================================================
 
     private void confirmDelete(
-            int position
+            String guardianId
     ) {
 
         AlertDialog dialog =
                 new AlertDialog.Builder(this)
                         .setTitle(
-                                "Remove Trusted Contact?"
+                                getTranslatedString(
+                                        "Remove Trusted Contact?"
+                                )
                         )
                         .setMessage(
-                                "This person will no longer receive " +
-                                        "your emergency alerts."
+                                getTranslatedString(
+                                        "This person will no longer receive "
+                                                + "your emergency alerts."
+                                )
                         )
                         .setNegativeButton(
-                                "Cancel",
+                                getTranslatedString(
+                                        "Cancel"
+                                ),
                                 null
                         )
                         .setPositiveButton(
-                                "Remove",
+                                getTranslatedString(
+                                        "Remove"
+                                ),
                                 (dialogInterface, which) ->
                                         deleteContact(
-                                                position
+                                                guardianId
                                         )
                         )
                         .create();
@@ -1429,61 +2090,168 @@ public class TrustedContactsActivity extends BaseActivity {
         dialog.show();
     }
 
+
     // ============================================================
     // DELETE CONTACT
     // ============================================================
 
     private void deleteContact(
-            int position
+            String guardianId
     ) {
+
+        db.collection("users")
+                .document(userUid)
+                .collection("guardians")
+                .document(guardianId)
+                .delete()
+
+                .addOnSuccessListener(
+                        unused -> {
+
+                            showTranslatedToast(
+                                    "Trusted contact removed",
+                                    Toast.LENGTH_SHORT
+                            );
+
+                            loadContactsFromFirestore();
+                        }
+                )
+
+                .addOnFailureListener(
+                        e -> {
+
+                            showTranslatedToast(
+                                    "Could not remove contact:\n"
+                                            + e.getMessage(),
+                                    Toast.LENGTH_LONG
+                            );
+                        }
+                );
+    }
+
+
+    // ============================================================
+    // TRANSLATE DYNAMICALLY CREATED VIEW
+    // ============================================================
+
+    private void translateNewView(View view) {
+
+        if (view == null) {
+            return;
+        }
+
+        String langCode =
+                LocaleHelper.getSavedLanguage(this);
+
+        if (langCode == null ||
+                langCode.equals("en")) {
+            return;
+        }
+
+        // ========================================================
+        // TEXT VIEW
+        // ========================================================
+
+        if (view instanceof TextView) {
+
+            try {
+
+                LanguageManager.translateTextView(
+                        this,
+                        (TextView) view,
+                        langCode
+                );
+
+            } catch (Exception ignored) {
+                // Translation must never crash the page.
+            }
+        }
+
+        // ========================================================
+        // CHILD VIEWS
+        // ========================================================
+
+        if (view instanceof android.view.ViewGroup) {
+
+            android.view.ViewGroup group =
+                    (android.view.ViewGroup) view;
+
+            for (
+                    int i = 0;
+                    i < group.getChildCount();
+                    i++
+            ) {
+
+                translateNewView(
+                        group.getChildAt(i)
+                );
+            }
+        }
+    }
+
+
+    // ============================================================
+    // TRANSLATED STRING
+    // ============================================================
+
+    private String getTranslatedString(
+            String englishText
+    ) {
+
+        if (englishText == null) {
+            return "";
+        }
+
+        String langCode =
+                LocaleHelper.getSavedLanguage(this);
+
+        if (langCode == null ||
+                langCode.equals("en")) {
+
+            return englishText;
+        }
 
         try {
 
-            String existing =
-                    preferences.getString(
-                            CONTACTS_KEY,
-                            "[]"
-                    );
+            TextView temp =
+                    new TextView(this);
 
-            JSONArray contacts =
-                    new JSONArray(
-                            existing
-                    );
+            temp.setText(
+                    englishText
+            );
 
-            if (position >= 0 &&
-                    position < contacts.length()) {
-
-                contacts.remove(
-                        position
-                );
-            }
-
-            preferences.edit()
-                    .putString(
-                            CONTACTS_KEY,
-                            contacts.toString()
-                    )
-                    .apply();
-
-            loadContacts();
-
-            Toast.makeText(
+            LanguageManager.translateTextView(
                     this,
-                    "Trusted contact removed",
-                    Toast.LENGTH_SHORT
-            ).show();
+                    temp,
+                    langCode
+            );
 
-        } catch (Exception e) {
+            return temp.getText()
+                    .toString();
 
-            e.printStackTrace();
+        } catch (Exception ignored) {
 
-            Toast.makeText(
-                    this,
-                    "Could not remove contact",
-                    Toast.LENGTH_SHORT
-            ).show();
+            return englishText;
         }
     }
+
+
+    // ============================================================
+    // TRANSLATED TOAST
+    // ============================================================
+
+    private void showTranslatedToast(
+            String englishText,
+            int duration
+    ) {
+
+        Toast.makeText(
+                this,
+                getTranslatedString(englishText),
+                duration
+        ).show();
+    }
+
 
     // ============================================================
     // DP TO PX

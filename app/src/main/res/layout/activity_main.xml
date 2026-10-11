@@ -944,6 +944,57 @@
 
                 </com.google.android.material.card.MaterialCardView>
 
+                <!-- SHE SHIELD QUANTUM DASHBOARD -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardQuantumDashboard"
+                    android:layout_width="0dp"
+                    android:layout_height="118dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="5dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:cardBackgroundColor="#FFFCFD"
+                    app:cardCornerRadius="18dp"
+                    app:cardElevation="5dp"
+                    app:cardUseCompatPadding="true"
+                    app:strokeColor="#F8BBD0"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <ImageView
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:src="@android:drawable/ic_menu_compass"
+                            app:tint="#E91E63" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="7dp"
+                            android:text="Quantum Dashboard"
+                            android:textColor="#2D2B52"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:text="Explore safety analytics"
+                            android:textColor="#7A7893"
+                            android:textSize="9sp" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
             </GridLayout>
 
 

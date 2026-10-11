@@ -1,364 +1,68 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@drawable/bg_safety_tips">
+    android:orientation="vertical"
+    android:background="#FFF5F7">
 
-    <LinearLayout
+    <!-- Header Toolbar with Defined Pink Border -->
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingStart="18dp"
-        android:paddingEnd="18dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="32dp">
-
-        <!-- ===================================================== -->
-        <!-- HEADER -->
-        <!-- ===================================================== -->
+        app:cardBackgroundColor="#FFFFFF"
+        app:cardCornerRadius="0dp"
+        app:cardElevation="2dp"
+        app:strokeColor="#F8BBD0"
+        app:strokeWidth="1dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:paddingTop="8dp"
-            android:paddingBottom="18dp">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp">
+
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Back"
+                android:src="@android:drawable/ic_menu_revert"
+                app:tint="#D81B60" />
 
             <TextView
-                android:id="@+id/tvSafetyIcon"
-                android:layout_width="70dp"
-                android:layout_height="70dp"
-                android:gravity="center"
-                android:text="SAFE"
-                android:textColor="#8E2858"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_safety_icon"
-                android:fontFamily="sans" />
-
-            <TextView
-                android:id="@+id/tvSafetyTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="Safety Tips"
-                android:textColor="#8E2858"
-                android:textSize="28sp"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:fontFamily="sans" />
-
-            <TextView
-                android:id="@+id/tvSafetySubtitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
-                android:text="Simple habits that can help you stay aware, confident and safe."
-                android:textColor="#765A68"
-                android:textSize="15sp"
-                android:gravity="center"
-                android:lineSpacingExtra="3dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- QUICK SAFETY CARD -->
-        <!-- ===================================================== -->
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_emergency_tip_card">
-
-            <TextView
-                android:id="@+id/tvQuickTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="If You Feel Unsafe"
-                android:textColor="#8E2858"
+                android:layout_marginStart="12dp"
+                android:text="Safety Tips &amp; Self-Defense"
+                android:textColor="#3C1B28"
                 android:textSize="19sp"
-                android:textStyle="bold"
-                android:fontFamily="sans" />
-
-            <TextView
-                android:id="@+id/tvQuickDescription"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Move toward safety first. Get around people, contact someone you trust and use emergency help when necessary."
-                android:textColor="#6F5362"
-                android:textSize="14sp"
-                android:lineSpacingExtra="3dp"
-                android:fontFamily="sans" />
-
-            <TextView
-                android:id="@+id/tvQuickSteps"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="1. Stay calm&#10;&#10;2. Move to a crowded or well-lit place&#10;&#10;3. Call someone you trust&#10;&#10;4. Use SheShield SOS if needed"
-                android:textColor="#694A5A"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
+                android:textStyle="bold" />
 
         </LinearLayout>
 
+    </com.google.android.material.card.MaterialCardView>
 
-        <!-- ===================================================== -->
-        <!-- EVERYDAY SAFETY -->
-        <!-- ===================================================== -->
+    <!-- Overlay Frame for Animated Floating Hearts -->
+    <FrameLayout
+        android:id="@+id/heartOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
 
-        <TextView
-            android:id="@+id/tvEssentialTitle"
+        <!-- Safety Tips Video List -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSafetyTips"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="10dp"
-            android:text="Everyday Safety"
-            android:textColor="#8E2858"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans" />
+            android:layout_height="match_parent"
+            android:padding="16dp"
+            android:clipToPadding="false"
+            tools:listitem="@layout/item_youtube_card" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_tip_white">
+    </FrameLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="• Stay aware of your surroundings.&#10;&#10;• Keep your phone charged when travelling alone.&#10;&#10;• Share your location with a trusted person when needed.&#10;&#10;• Prefer busy and well-lit routes, especially at night."
-                android:textColor="#624C58"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- WALKING ALONE -->
-        <!-- ===================================================== -->
-
-        <TextView
-            android:id="@+id/tvWalkingTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="10dp"
-            android:text="When Walking Alone"
-            android:textColor="#8E2858"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_tip_white">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="• Choose busy, well-lit roads.&#10;&#10;• Keep one ear free if using earphones.&#10;&#10;• Keep your phone easily accessible.&#10;&#10;• If someone makes you uncomfortable, enter a nearby shop or another populated place."
-                android:textColor="#624C58"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- CAB / AUTO -->
-        <!-- ===================================================== -->
-
-        <TextView
-            android:id="@+id/tvTravelTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="10dp"
-            android:text="Cab and Auto Safety"
-            android:textColor="#8E2858"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_tip_white">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="• Verify the vehicle and driver before entering.&#10;&#10;• Share your trip details with someone you trust.&#10;&#10;• Keep your phone accessible during the journey.&#10;&#10;• If something feels wrong, ask to stop at a busy public location."
-                android:textColor="#624C58"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- DIGITAL SAFETY -->
-        <!-- ===================================================== -->
-
-        <TextView
-            android:id="@+id/tvDigitalTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="10dp"
-            android:text="Digital Safety"
-            android:textColor="#8E2858"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_tip_white">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="• Do not share passwords or sensitive information.&#10;&#10;• Be careful when sharing your live location publicly.&#10;&#10;• Avoid clicking suspicious links.&#10;&#10;• Keep your phone and important apps protected with a lock."
-                android:textColor="#624C58"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- IF FOLLOWED -->
-        <!-- ===================================================== -->
-
-        <TextView
-            android:id="@+id/tvFollowedTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="10dp"
-            android:text="If You Are Being Followed"
-            android:textColor="#8E2858"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_tip_white">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="1. Do not go directly home.&#10;&#10;2. Move toward a busy, well-lit location.&#10;&#10;3. Call someone you trust.&#10;&#10;4. Ask security staff or nearby people for help.&#10;&#10;5. Trigger SOS if you believe you are in immediate danger."
-                android:textColor="#624C58"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- EMERGENCY RESPONSE -->
-        <!-- ===================================================== -->
-
-        <TextView
-            android:id="@+id/tvEmergencyTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="10dp"
-            android:text="In an Emergency"
-            android:textColor="#8E2858"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_emergency_tip_card">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="• Get to a safe public place if possible.&#10;&#10;• Contact a trusted person or emergency service.&#10;&#10;• Use SheShield SOS when you need immediate assistance.&#10;&#10;• Follow instructions from emergency responders."
-                android:textColor="#624C58"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-
-        <!-- ===================================================== -->
-        <!-- REMEMBER -->
-        <!-- ===================================================== -->
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="20dp"
-            android:background="@drawable/bg_remember_card">
-
-            <TextView
-                android:id="@+id/tvRememberTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Remember"
-                android:textColor="#8E2858"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:fontFamily="sans" />
-
-            <TextView
-                android:id="@+id/tvRememberText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Trust your instincts. You do not need to prove that a situation is dangerous before choosing to leave it."
-                android:textColor="#6D5260"
-                android:textSize="14sp"
-                android:gravity="center"
-                android:lineSpacingExtra="4dp"
-                android:fontFamily="sans" />
-
-        </LinearLayout>
-
-    </LinearLayout>
-
-</ScrollView>
+</LinearLayout>

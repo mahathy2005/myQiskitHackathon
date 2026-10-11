@@ -1,7 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.SheShield" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    <!-- Dark application theme -->
+    <style name="Theme.SheShield" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Dark theme brand colors -->
+        <item name="colorPrimary">#2D1552</item>
+        <item name="colorPrimaryVariant">#1A1C1E</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#1A1C1E</item>
     </style>
 </resources>

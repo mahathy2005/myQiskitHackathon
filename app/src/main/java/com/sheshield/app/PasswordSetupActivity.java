@@ -1,10 +1,8 @@
 package com.sheshield.app;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -15,23 +13,13 @@ public class PasswordSetupActivity extends AppCompatActivity {
 
     private TextInputEditText etPassword;
     private TextInputEditText etConfirmPassword;
-
     private MaterialButton btnFinalSignUp;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
 
-        setContentView(
-                R.layout.activity_password_setup
-        );
-
-
-        // =========================
-        // INITIALIZE VIEWS
-        // =========================
+        setContentView(R.layout.activity_password_setup);
 
         etPassword =
                 findViewById(R.id.etPassword);
@@ -42,125 +30,39 @@ public class PasswordSetupActivity extends AppCompatActivity {
         btnFinalSignUp =
                 findViewById(R.id.btnFinalSignUp);
 
+        if (btnFinalSignUp != null) {
 
-        // =========================
-        // FINAL SIGN UP BUTTON
-        // =========================
+            btnFinalSignUp.setOnClickListener(v -> {
 
-        btnFinalSignUp.setOnClickListener(v -> {
+                if (validatePasswords()) {
 
-            if (validatePasswords()) {
-
-                // =========================================
-                // GET FULL NAME FROM SIGNUP ACTIVITY
-                // =========================================
-
-                String fullName =
-                        getIntent()
-                                .getStringExtra(
-                                        "fullName"
-                                );
-
-
-                // =========================================
-                // SAVE USER NAME
-                // =========================================
-
-                SharedPreferences sharedPreferences =
-                        getSharedPreferences(
-                                "UserSession",
-                                MODE_PRIVATE
-                        );
-
-
-                SharedPreferences.Editor editor =
-                        sharedPreferences.edit();
-
-
-                editor.putString(
-                        "USER_NAME",
-                        fullName != null
-                                ? fullName.trim()
-                                : "User"
-                );
-
-
-                // Optional:
-                // Save login/registration status
-
-                editor.putBoolean(
-                        "IS_LOGGED_IN",
-                        true
-                );
-
-
-                editor.apply();
-
-
-                // =========================================
-                // SHOW SUCCESS MESSAGE
-                // =========================================
-
-                Toast.makeText(
-                        PasswordSetupActivity.this,
-                        "Registration Successful!",
-                        Toast.LENGTH_LONG
-                ).show();
-
-
-                // =========================================
-                // OPEN MAIN ACTIVITY
-                // =========================================
-
-                Intent intent =
-                        new Intent(
-                                PasswordSetupActivity.this,
-                                MainActivity.class
-                        );
-
-
-                startActivity(intent);
-
-
-                // Prevent returning to signup pages
-
-                finishAffinity();
-            }
-        });
+                    openOtpScreen();
+                }
+            });
+        }
     }
 
-
-    // =========================
-    // VALIDATE PASSWORDS
-    // =========================
+    // ============================================================
+    // PASSWORD VALIDATION
+    // ============================================================
 
     private boolean validatePasswords() {
 
         String password =
-                etPassword.getText() != null
-                        ?
-                        etPassword
-                                .getText()
-                                .toString()
-                                .trim()
-                        :
-                        "";
-
+                etPassword != null
+                        && etPassword.getText() != null
+                        ? etPassword.getText()
+                        .toString()
+                        .trim()
+                        : "";
 
         String confirmPassword =
-                etConfirmPassword.getText() != null
-                        ?
-                        etConfirmPassword
-                                .getText()
-                                .toString()
-                                .trim()
-                        :
-                        "";
-
-
-        // =========================
-        // EMPTY PASSWORD
-        // =========================
+                etConfirmPassword != null
+                        && etConfirmPassword.getText() != null
+                        ? etConfirmPassword.getText()
+                        .toString()
+                        .trim()
+                        : "";
 
         if (TextUtils.isEmpty(password)) {
 
@@ -173,11 +75,6 @@ public class PasswordSetupActivity extends AppCompatActivity {
             return false;
         }
 
-
-        // =========================
-        // MINIMUM LENGTH
-        // =========================
-
         if (password.length() < 6) {
 
             etPassword.setError(
@@ -188,11 +85,6 @@ public class PasswordSetupActivity extends AppCompatActivity {
 
             return false;
         }
-
-
-        // =========================
-        // EMPTY CONFIRM PASSWORD
-        // =========================
 
         if (TextUtils.isEmpty(confirmPassword)) {
 
@@ -205,11 +97,6 @@ public class PasswordSetupActivity extends AppCompatActivity {
             return false;
         }
 
-
-        // =========================
-        // PASSWORD MATCH
-        // =========================
-
         if (!password.equals(confirmPassword)) {
 
             etConfirmPassword.setError(
@@ -221,7 +108,118 @@ public class PasswordSetupActivity extends AppCompatActivity {
             return false;
         }
 
-
         return true;
+    }
+
+    // ============================================================
+    // OPEN OTP SCREEN
+    // ============================================================
+
+    private void openOtpScreen() {
+
+        Intent oldIntent =
+                getIntent();
+
+        String password =
+                etPassword.getText()
+                        .toString()
+                        .trim();
+
+        Intent intent =
+                new Intent(
+                        PasswordSetupActivity.this,
+                        OtpAuthActivity.class
+                );
+
+        // ========================================================
+        // PERSONAL DETAILS
+        // ========================================================
+
+        intent.putExtra(
+                "fullName",
+                oldIntent.getStringExtra("fullName")
+        );
+
+        intent.putExtra(
+                "dob",
+                oldIntent.getStringExtra("dob")
+        );
+
+        intent.putExtra(
+                "age",
+                oldIntent.getStringExtra("age")
+        );
+
+        intent.putExtra(
+                "bloodGroup",
+                oldIntent.getStringExtra("bloodGroup")
+        );
+
+        intent.putExtra(
+                "email",
+                oldIntent.getStringExtra("email")
+        );
+
+        intent.putExtra(
+                "userMobile",
+                oldIntent.getStringExtra("userMobile")
+        );
+
+        intent.putExtra(
+                "address",
+                oldIntent.getStringExtra("address")
+        );
+
+        intent.putExtra(
+                "about",
+                oldIntent.getStringExtra("about")
+        );
+
+        // ========================================================
+        // GUARDIAN DETAILS
+        // ========================================================
+
+        intent.putExtra(
+                "guardianName",
+                oldIntent.getStringExtra("guardianName")
+        );
+
+        intent.putExtra(
+                "guardianRelation",
+                oldIntent.getStringExtra("guardianRelation")
+        );
+
+        intent.putExtra(
+                "guardianMobile",
+                oldIntent.getStringExtra("guardianMobile")
+        );
+
+        intent.putExtra(
+                "guardianBloodGroup",
+                oldIntent.getStringExtra("guardianBloodGroup")
+        );
+
+        intent.putExtra(
+                "guardianEmail",
+                oldIntent.getStringExtra("guardianEmail")
+        );
+
+        intent.putExtra(
+                "guardianAddress",
+                oldIntent.getStringExtra("guardianAddress")
+        );
+
+        // ========================================================
+        // PASSWORD
+        // ========================================================
+
+        intent.putExtra(
+                "password",
+                password
+        );
+
+        startActivity(intent);
+
+        finish();
     }
 }

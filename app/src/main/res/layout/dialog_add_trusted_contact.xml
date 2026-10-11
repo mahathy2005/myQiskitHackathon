@@ -5,7 +5,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#FFF1F7"
+    android:background="#FFF6F9"
     android:fillViewport="true"
     android:scrollbars="none">
 
@@ -14,9 +14,10 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="22dp"
-        android:paddingTop="16dp"
+        android:paddingTop="18dp"
         android:paddingEnd="22dp"
-        android:paddingBottom="18dp">
+        android:paddingBottom="20dp">
+
 
         <!-- ===================================================== -->
         <!-- HEADER -->
@@ -28,27 +29,30 @@
             android:gravity="center"
             android:text="♥"
             android:textColor="#E91E63"
-            android:textSize="28sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="2dp"
-            android:fontFamily="sans-serif-black"
-            android:text="Add Trusted Contact"
-            android:textColor="#E91E63"
-            android:textSize="22sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="3dp"
+            android:fontFamily="sans-serif-black"
+            android:text="Add Trusted Contact"
+            android:textColor="#E91E63"
+            android:textSize="22sp" />
+
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="4dp"
             android:text="Someone who can be there for you"
             android:textColor="#7A7893"
             android:textSize="12sp" />
+
 
         <!-- ===================================================== -->
         <!-- PRIVACY -->
@@ -57,7 +61,7 @@
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="13dp"
+            android:layout_marginTop="14dp"
             app:cardBackgroundColor="#FCE4EC"
             app:cardCornerRadius="15dp"
             app:cardElevation="0dp">
@@ -65,8 +69,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="11dp"
-                android:text="🔒  Their details are stored privately on your device"
+                android:padding="12dp"
+                android:text="🔒  Their details are stored privately for your safety"
                 android:textColor="#8E24AA"
                 android:textSize="10sp"
                 android:textStyle="bold" />
@@ -76,17 +80,17 @@
 
         <!-- ===================================================== -->
         <!-- FULL NAME -->
-        <!-- SAME DATA ID AS SIGNUP GUARDIAN NAME -->
         <!-- ===================================================== -->
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="17dp"
             android:text="FULL NAME *"
             android:textColor="#2D2B52"
             android:textSize="11sp"
             android:textStyle="bold" />
+
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -119,11 +123,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="11dp"
+            android:layout_marginTop="12dp"
             android:text="RELATION *"
             android:textColor="#2D2B52"
             android:textSize="11sp"
             android:textStyle="bold" />
+
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -154,11 +159,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="11dp"
+            android:layout_marginTop="12dp"
             android:text="MOBILE NUMBER *"
             android:textColor="#2D2B52"
             android:textSize="11sp"
             android:textStyle="bold" />
+
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -192,11 +198,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="11dp"
+            android:layout_marginTop="12dp"
             android:text="BLOOD GROUP *"
             android:textColor="#2D2B52"
             android:textSize="11sp"
             android:textStyle="bold" />
+
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -227,11 +234,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="11dp"
+            android:layout_marginTop="12dp"
             android:text="EMAIL • OPTIONAL"
             android:textColor="#2D2B52"
             android:textSize="11sp"
             android:textStyle="bold" />
+
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -264,11 +272,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="11dp"
+            android:layout_marginTop="12dp"
             android:text="ADDRESS • OPTIONAL"
             android:textColor="#2D2B52"
             android:textSize="11sp"
             android:textStyle="bold" />
+
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -297,13 +306,13 @@
 
 
         <!-- ===================================================== -->
-        <!-- BUTTONS INSIDE THE BOX -->
+        <!-- BUTTONS -->
         <!-- ===================================================== -->
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="19dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
@@ -321,6 +330,7 @@
                 app:cornerRadius="14dp"
                 app:strokeColor="#8E24AA"
                 app:strokeWidth="1dp" />
+
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSave"
@@ -349,7 +359,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="13dp"
             android:gravity="center"
-            android:text="♡ Your safety circle can include as many contacts as needed."
+            android:text="♡  Your safety circle can include as many contacts as needed."
             android:textColor="#C2185B"
             android:textSize="10sp"
             android:textStyle="bold" />

@@ -234,6 +234,7 @@ public class VoiceSosService extends Service
                                         + "\"help me\", "
                                         + "\"save me\", "
                                         + "\"emergency\", "
+                                        + "\"call me\", "
                                         + "\"safe\", "
                                         + "\"i am safe\", "
                                         + "\"[unk]\""
@@ -569,6 +570,52 @@ public class VoiceSosService extends Service
             // ====================================================
 
             if (isSosTriggered) {
+
+                return;
+            }
+
+
+            // ====================================================
+            // FAKE CALL TRIGGER ("call me")
+            // ====================================================
+
+            boolean callMeDetected =
+                    text.contains("call me")
+                            || partial.contains("call me");
+
+            if (callMeDetected) {
+
+                Log.d(
+                        TAG,
+                        "Fake Call trigger keyword detected!"
+                );
+
+                Intent fakeCallIntent =
+                        new Intent(
+                                this,
+                                FakeCallActivity.class
+                        );
+
+                fakeCallIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                );
+
+                try {
+
+                    startActivity(
+                            fakeCallIntent
+                    );
+
+                } catch (Exception e) {
+
+                    Log.e(
+                            TAG,
+                            "Unable to open FakeCallActivity from Voice Service",
+                            e
+                    );
+                }
 
                 return;
             }

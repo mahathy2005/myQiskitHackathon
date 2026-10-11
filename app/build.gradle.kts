@@ -1,8 +1,8 @@
-plugins {
+﻿plugins {
     alias(libs.plugins.android.application)
 
     // Firebase Google Services Plugin
-    id("com.google.gms.google-services") version "4.4.4"
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -23,7 +23,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Enable code shrinking, obfuscation, and optimization
+            isMinifyEnabled = true
+
+            // Enable automatic unused resource removal
+            isShrinkResources = true
 
             proguardFiles(
                 getDefaultProguardFile(
@@ -47,6 +51,14 @@ android {
 
 dependencies {
 
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("org.osmdroid:osmdroid-mapsforge:6.1.18")
+    implementation("org.mapsforge:mapsforge-map-android:0.21.0")
+    implementation("org.mapsforge:mapsforge-map:0.21.0")
+    implementation("org.mapsforge:mapsforge-themes:0.21.0")
+    implementation("com.graphhopper:graphhopper-core:1.0-pre33.4")
+
     // =========================================================
     // ANDROIDX
     // =========================================================
@@ -56,14 +68,23 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
     implementation(libs.fragment)
+    implementation(libs.preference)
 
 
     // =========================================================
     // GOOGLE LOCATION SERVICES
-    // Required for getting user's current GPS location
     // =========================================================
 
     implementation(libs.play.services.location)
+
+
+    // =========================================================
+    // GOOGLE PLACES SDK
+    // =========================================================
+
+    implementation(
+        "com.google.android.libraries.places:places:5.0.0"
+    )
 
 
     // =========================================================
@@ -85,11 +106,13 @@ dependencies {
         )
     )
 
-    // Google Location Services
-    implementation("com.google.android.gms:play-services-location:21.4.0")
 
-// Google Places SDK - Nearby Search (New)
-    implementation("com.google.android.libraries.places:places:5.0.0")
+    // =========================================================
+    // FIREBASE AUTHENTICATION & FIRESTORE
+    // =========================================================
+
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
 
 
     // =========================================================
@@ -102,32 +125,10 @@ dependencies {
 
 
     // =========================================================
-    // FIREBASE AUTHENTICATION - PHONE OTP
+    // UNIT & ANDROID TESTING
     // =========================================================
 
-    implementation(
-        "com.google.firebase:firebase-auth"
-    )
-
-
-    // =========================================================
-    // UNIT TESTING
-    // =========================================================
-
-    testImplementation(
-        libs.junit
-    )
-
-
-    // =========================================================
-    // ANDROID TESTING
-    // =========================================================
-
-    androidTestImplementation(
-        libs.ext.junit
-    )
-
-    androidTestImplementation(
-        libs.espresso.core
-    )
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.ext.junit)
+    androidTestImplementation(libs.espresso.core)
 }

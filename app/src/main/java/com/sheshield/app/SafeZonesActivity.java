@@ -1,25 +1,26 @@
 package com.sheshield.app;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.location.Priority;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 
@@ -29,83 +30,30 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URLEncoder;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-
-/**
- * ================================================================
- * SAFE ZONES ACTIVITY
- * ================================================================
- *
- * Uses:
- *
- * 1. Android GPS / Fused Location Provider
- * 2. OpenStreetMap
- * 3. Overpass API
- *
- * Does NOT use:
- *
- * - Google Places API
- * - Google Maps Places SDK
- * - Google Cloud billing
- * - Google Maps API key
- *
- * The returned places are actual places contained in OpenStreetMap.
- *
- * IMPORTANT:
- * The app never creates fake locations to fill the list.
- * If OpenStreetMap has 37 mapped places nearby, up to those
- * real places can be displayed.
- */
 public class SafeZonesActivity extends BaseActivity {
-
-    // =============================================================
-    // CONSTANTS
-    // =============================================================
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
 
-    /*
-     * Search radius in metres.
-     *
-     * 10 km gives considerably more results than the old 5 km
-     * search while still keeping the search geographically useful.
-     */
-    private static final int SEARCH_RADIUS_METERS = 5000;
-    /*
-     * Overpass endpoints.
-     *
-     * If the first server is unavailable, the second one is tried.
-     */
-    private static final String[] OVERPASS_ENDPOINTS = {
-            "https://overpass-api.de/api/interpreter",
-            "https://overpass.kumi.systems/api/interpreter"
-    };
+    private static final float SEARCH_RADIUS_KM = 5.0f;
 
-    // =============================================================
-    // LOCATION
-    // =============================================================
+    private static final int MAX_RESULTS = 20;
 
-    private FusedLocationProviderClient fusedLocationClient;
+    private static final long LOCATION_UPDATE_INTERVAL = 2000L;
+
+    private static final float LOCATION_MIN_DISTANCE = 5.0f;
+
+    private static final long LOCATION_TIMEOUT = 15000L;
+
+    private LocationManager locationManager;
 
     private Location currentLocation;
-
-    // =============================================================
-    // UI
-    // =============================================================
 
     private TextView tvCurrentLocation;
     private TextView tvResultCount;
@@ -118,116 +66,154 @@ public class SafeZonesActivity extends BaseActivity {
 
     private Chip chipAll;
     private Chip chipPolice;
-    private Chip chipCrowded;
     private Chip chipHospitals;
-
-    // =============================================================
-    // ADAPTER
-    // =============================================================
+    private Chip chipCrowded;
 
     private SafeZonesAdapter adapter;
 
-    // =============================================================
-    // DATA
-    // =============================================================
+    private final List<SafePlace> allPlaces = new ArrayList<>();
 
-    /*
-     * All real places returned from OpenStreetMap.
-     */
-    private final List<SafePlace> allPlaces =
-            new ArrayList<>();
-
-    /*
-     * Used to prevent duplicate OSM objects appearing twice.
-     */
-    private final Set<String> existingPlaceKeys =
-            new HashSet<>();
-
-    /*
-     * Background executor.
-     */
-    private final ExecutorService executor =
-            Executors.newSingleThreadExecutor();
-
-    /*
-     * Current filter.
-     */
     private String currentFilter = "ALL";
 
+    private final Handler handler =
+            new Handler(Looper.getMainLooper());
 
-    // =============================================================
-    // ACTIVITY CREATED
-    // =============================================================
+    private boolean locationReceived = false;
+
+    // ============================================================
+    // LOCATION LISTENER
+    // ============================================================
+
+    private final LocationListener locationListener =
+            new LocationListener() {
+
+                @Override
+                public void onLocationChanged(
+                        @NonNull Location location) {
+
+                    if (location == null) {
+                        return;
+                    }
+
+                    locationReceived = true;
+
+                    handler.removeCallbacks(locationTimeoutRunnable);
+
+                    onLocationFound(location);
+                }
+
+                @Override
+                public void onProviderEnabled(
+                        @NonNull String provider) {
+                }
+
+                @Override
+                public void onProviderDisabled(
+                        @NonNull String provider) {
+                }
+
+                @Override
+                public void onStatusChanged(
+                        String provider,
+                        int status,
+                        Bundle extras) {
+                }
+            };
+
+    // ============================================================
+    // LOCATION TIMEOUT
+    // ============================================================
+
+    private final Runnable locationTimeoutRunnable =
+            new Runnable() {
+
+                @Override
+                public void run() {
+
+                    if (locationReceived) {
+                        return;
+                    }
+
+                    // One last attempt to get ANY cached location
+                    Location fallback =
+                            getBestLastKnownLocation();
+
+                    if (fallback != null) {
+
+                        locationReceived = true;
+
+                        onLocationFound(fallback);
+
+                        return;
+                    }
+
+                    stopLocationUpdates();
+
+                    hideLoading();
+
+                    if (tvCurrentLocation != null) {
+                        tvCurrentLocation.setText(
+                                "Location unavailable"
+                        );
+                    }
+
+                    if (tvResultCount != null) {
+                        tvResultCount.setText(
+                                "Enable Location and try Refresh"
+                        );
+                    }
+
+                    Toast.makeText(
+                            SafeZonesActivity.this,
+                            "Could not get your location. Please enable Location and try again.",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            };
+
+    // ============================================================
+    // ON CREATE
+    // ============================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
 
-        setContentView(
-                R.layout.activity_safe_zones
-        );
-
-        // ---------------------------------------------------------
-        // FIND VIEWS
-        // ---------------------------------------------------------
+        setContentView(R.layout.activity_safe_zones);
 
         tvCurrentLocation =
-                findViewById(
-                        R.id.tvCurrentLocation
-                );
+                findViewById(R.id.tvCurrentLocation);
 
         tvResultCount =
-                findViewById(
-                        R.id.tvResultCount
-                );
+                findViewById(R.id.tvResultCount);
 
         progressBar =
-                findViewById(
-                        R.id.progressBar
-                );
+                findViewById(R.id.progressBar);
 
         rvSafeZones =
-                findViewById(
-                        R.id.rvSafeZones
-                );
+                findViewById(R.id.rvSafeZones);
 
         btnRefreshLocation =
-                findViewById(
-                        R.id.btnRefreshLocation
-                );
+                findViewById(R.id.btnRefreshLocation);
 
         chipAll =
-                findViewById(
-                        R.id.chipAll
-                );
+                findViewById(R.id.chipAll);
 
         chipPolice =
-                findViewById(
-                        R.id.chipPolice
-                );
-
-        chipCrowded =
-                findViewById(
-                        R.id.chipCrowded
-                );
+                findViewById(R.id.chipPolice);
 
         chipHospitals =
-                findViewById(
-                        R.id.chipHospitals
-                );
+                findViewById(R.id.chipHospitals);
 
-
-        // ---------------------------------------------------------
-        // RECYCLER VIEW
-        // ---------------------------------------------------------
+        chipCrowded =
+                findViewById(R.id.chipCrowded);
 
         rvSafeZones.setLayoutManager(
                 new LinearLayoutManager(this)
         );
 
         rvSafeZones.setHasFixedSize(false);
-
 
         adapter =
                 new SafeZonesAdapter(
@@ -237,128 +223,325 @@ public class SafeZonesActivity extends BaseActivity {
 
                             @Override
                             public void onNavigate(
-                                    SafePlace place
-                            ) {
+                                    SafePlace place) {
 
-                                openGoogleMaps(place);
+                                openOfflineLocation(place);
                             }
 
                             @Override
                             public void onCall(
-                                    SafePlace place
-                            ) {
+                                    SafePlace place) {
 
                                 callPlace(place);
                             }
                         }
                 );
 
-
         rvSafeZones.setAdapter(adapter);
 
+        locationManager =
+                (LocationManager)
+                        getSystemService(
+                                Context.LOCATION_SERVICE
+                        );
 
-        // ---------------------------------------------------------
-        // LOCATION CLIENT
-        // ---------------------------------------------------------
-
-        fusedLocationClient =
-                LocationServices
-                        .getFusedLocationProviderClient(this);
-
-
-        // ---------------------------------------------------------
-        // REFRESH BUTTON
-        // ---------------------------------------------------------
+        setupFilters();
 
         if (btnRefreshLocation != null) {
 
             btnRefreshLocation.setOnClickListener(
-                    v -> checkLocationPermission()
+                    v -> {
+
+                        currentLocation = null;
+
+                        locationReceived = false;
+
+                        getCurrentLocation();
+                    }
             );
         }
 
-
-        // ---------------------------------------------------------
-        // FILTERS
-        // ---------------------------------------------------------
-
-        setupFilters();
-
-
-        // ---------------------------------------------------------
-        // GET LOCATION
-        // ---------------------------------------------------------
+        // Load local JSON first.
+        // NO INTERNET REQUIRED.
+        loadOfflineSafeZones();
 
         checkLocationPermission();
     }
 
+    // ============================================================
+    // LOAD OFFLINE SAFE ZONES
+    // ============================================================
 
-    // =============================================================
-    // FILTER SETUP
-    // =============================================================
+    private void loadOfflineSafeZones() {
+
+        allPlaces.clear();
+
+        try {
+
+            InputStream inputStream =
+                    getAssets().open(
+                            "safe_zones.json"
+                    );
+
+            String json =
+                    readAssetFile(inputStream);
+
+            if (json == null ||
+                    json.trim().isEmpty()) {
+
+                hideLoading();
+
+                Toast.makeText(
+                        this,
+                        "safe_zones.json is empty",
+                        Toast.LENGTH_LONG
+                ).show();
+
+                return;
+            }
+
+            JSONObject root =
+                    new JSONObject(json);
+
+            JSONArray places =
+                    root.optJSONArray(
+                            "safe_zones"
+                    );
+
+            if (places == null) {
+
+                hideLoading();
+
+                Toast.makeText(
+                        this,
+                        "safe_zones.json has no safe_zones array",
+                        Toast.LENGTH_LONG
+                ).show();
+
+                return;
+            }
+
+            for (int i = 0;
+                 i < places.length();
+                 i++) {
+
+                JSONObject object =
+                        places.optJSONObject(i);
+
+                if (object == null) {
+                    continue;
+                }
+
+                String id =
+                        object.optString(
+                                "id",
+                                String.valueOf(i + 1)
+                        );
+
+                String name =
+                        object.optString(
+                                "name",
+                                "Safe Place"
+                        );
+
+                String category =
+                        object.optString(
+                                "category",
+                                "SAFE PLACE"
+                        );
+
+                String address =
+                        object.optString(
+                                "address",
+                                "Address unavailable"
+                        );
+
+                String phone =
+                        object.optString(
+                                "phone",
+                                ""
+                        );
+
+                double latitude =
+                        object.optDouble(
+                                "latitude",
+                                Double.NaN
+                        );
+
+                double longitude =
+                        object.optDouble(
+                                "longitude",
+                                Double.NaN
+                        );
+
+                if (Double.isNaN(latitude) ||
+                        Double.isNaN(longitude)) {
+
+                    continue;
+                }
+
+                if (latitude == 0 ||
+                        longitude == 0) {
+
+                    continue;
+                }
+
+                SafePlace place =
+                        new SafePlace(
+                                id,
+                                name,
+                                category,
+                                address,
+                                phone,
+                                latitude,
+                                longitude
+                        );
+
+                allPlaces.add(place);
+            }
+
+            if (tvResultCount != null) {
+
+                tvResultCount.setText(
+                        allPlaces.size()
+                                + " offline places available"
+                );
+            }
+
+        } catch (Exception e) {
+
+            hideLoading();
+
+            if (tvResultCount != null) {
+
+                tvResultCount.setText(
+                        "Could not load offline places"
+                );
+            }
+
+            Toast.makeText(
+                    this,
+                    "Error loading safe_zones.json",
+                    Toast.LENGTH_LONG
+            ).show();
+        }
+    }
+
+    // ============================================================
+    // READ JSON
+    // ============================================================
+
+    private String readAssetFile(
+            InputStream inputStream)
+            throws Exception {
+
+        StringBuilder builder =
+                new StringBuilder();
+
+        BufferedReader reader =
+                new BufferedReader(
+                        new InputStreamReader(
+                                inputStream,
+                                StandardCharsets.UTF_8
+                        )
+                );
+
+        String line;
+
+        while (
+                (line = reader.readLine())
+                        != null
+        ) {
+
+            builder.append(line);
+        }
+
+        reader.close();
+
+        inputStream.close();
+
+        return builder.toString();
+    }
+
+    // ============================================================
+    // FILTERS
+    // ============================================================
 
     private void setupFilters() {
 
         if (chipAll != null) {
 
-            chipAll.setOnClickListener(v -> {
+            chipAll.setOnClickListener(
+                    v -> {
 
-                currentFilter = "ALL";
+                        currentFilter = "ALL";
 
-                loadFilteredPlaces();
-            });
+                        loadFilteredPlaces();
+                    }
+            );
         }
-
 
         if (chipPolice != null) {
 
-            chipPolice.setOnClickListener(v -> {
+            chipPolice.setOnClickListener(
+                    v -> {
 
-                currentFilter = "POLICE";
+                        currentFilter = "POLICE";
 
-                loadFilteredPlaces();
-            });
+                        loadFilteredPlaces();
+                    }
+            );
         }
-
 
         if (chipHospitals != null) {
 
-            chipHospitals.setOnClickListener(v -> {
+            chipHospitals.setOnClickListener(
+                    v -> {
 
-                currentFilter = "HOSPITAL";
+                        currentFilter = "HOSPITAL";
 
-                loadFilteredPlaces();
-            });
+                        loadFilteredPlaces();
+                    }
+            );
         }
-
 
         if (chipCrowded != null) {
 
-            chipCrowded.setOnClickListener(v -> {
+            chipCrowded.setOnClickListener(
+                    v -> {
 
-                currentFilter = "CROWDED";
+                        currentFilter = "CROWDED";
 
-                loadFilteredPlaces();
-            });
+                        loadFilteredPlaces();
+                    }
+            );
         }
     }
 
-
-    // =============================================================
-    // LOCATION PERMISSION
-    // =============================================================
+    // ============================================================
+    // PERMISSION
+    // ============================================================
 
     private void checkLocationPermission() {
 
-        if (
+        boolean fineGranted =
                 ActivityCompat.checkSelfPermission(
                         this,
                         Manifest.permission.ACCESS_FINE_LOCATION
                 )
-                        != PackageManager.PERMISSION_GRANTED
-        ) {
+                        == PackageManager.PERMISSION_GRANTED;
+
+        boolean coarseGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        if (!fineGranted && !coarseGranted) {
 
             ActivityCompat.requestPermissions(
+
                     this,
 
                     new String[]{
@@ -371,1890 +554,705 @@ public class SafeZonesActivity extends BaseActivity {
 
         } else {
 
-            getUserLocation();
+            getCurrentLocation();
         }
     }
 
+    // ============================================================
+    // MAIN LOCATION METHOD
+    // ============================================================
 
-    // =============================================================
-    // GET CURRENT LOCATION
-    // =============================================================
+    private void getCurrentLocation() {
 
-    private void getUserLocation() {
+        locationReceived = false;
+
+        handler.removeCallbacks(
+                locationTimeoutRunnable
+        );
 
         showLoading();
 
-
         if (tvCurrentLocation != null) {
 
             tvCurrentLocation.setText(
-                    "Finding your current location..."
+                    "Finding your location..."
             );
         }
 
-
-        if (
-                ActivityCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                )
-                        != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (locationManager == null) {
 
             hideLoading();
+
+            if (tvCurrentLocation != null) {
+
+                tvCurrentLocation.setText(
+                        "Location service unavailable"
+                );
+            }
 
             return;
         }
 
-
-        fusedLocationClient
-                .getCurrentLocation(
-                        Priority.PRIORITY_HIGH_ACCURACY,
-                        null
-                )
-                .addOnSuccessListener(
-                        this,
-
-                        location -> {
-
-                            if (location != null) {
-
-                                onLocationFound(location);
-
-                            } else {
-
-                                getLastKnownLocation();
-                            }
-                        }
-                )
-                .addOnFailureListener(
-                        this,
-
-                        e -> getLastKnownLocation()
-                );
-    }
-
-
-    // =============================================================
-    // LAST KNOWN LOCATION FALLBACK
-    // =============================================================
-
-    private void getLastKnownLocation() {
-
-        if (
+        boolean fineGranted =
                 ActivityCompat.checkSelfPermission(
                         this,
                         Manifest.permission.ACCESS_FINE_LOCATION
                 )
-                        != PackageManager.PERMISSION_GRANTED
-        ) {
+                        == PackageManager.PERMISSION_GRANTED;
+
+        boolean coarseGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        if (!fineGranted && !coarseGranted) {
 
             hideLoading();
+
+            checkLocationPermission();
 
             return;
         }
 
+        // ========================================================
+        // STEP 1
+        // USE ANY EXISTING LOCATION FIRST
+        // ========================================================
 
-        fusedLocationClient
-                .getLastLocation()
-                .addOnSuccessListener(
-                        this,
+        Location lastLocation =
+                getBestLastKnownLocation();
 
-                        location -> {
+        if (lastLocation != null) {
 
-                            if (location != null) {
+            locationReceived = true;
 
-                                onLocationFound(location);
+            onLocationFound(lastLocation);
 
-                            } else {
+            // Continue requesting a newer location silently.
+            requestFreshLocation();
 
-                                hideLoading();
+            return;
+        }
 
-                                if (tvCurrentLocation != null) {
+        // ========================================================
+        // STEP 2
+        // REQUEST GPS + NETWORK
+        // ========================================================
 
-                                    tvCurrentLocation.setText(
-                                            "Unable to determine location"
-                                    );
-                                }
-
-
-                                Toast.makeText(
-                                        this,
-                                        "Please turn on GPS and try again.",
-                                        Toast.LENGTH_LONG
-                                ).show();
-                            }
-                        }
-                );
+        requestFreshLocation();
     }
 
+    // ============================================================
+    // REQUEST GPS + NETWORK LOCATION
+    // ============================================================
 
-    // =============================================================
-    // LOCATION FOUND
-    // =============================================================
+    private void requestFreshLocation() {
 
-    private void onLocationFound(
-            Location location
-    ) {
+        if (locationManager == null) {
+            showLocationError();
+            return;
+        }
 
-        currentLocation = location;
+        boolean fineGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
 
+        boolean coarseGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        if (!fineGranted && !coarseGranted) {
+            showLocationError();
+            return;
+        }
+
+        stopLocationUpdates();
+
+        boolean requested = false;
+
+        // ========================================================
+        // GPS
+        // ========================================================
+
+        try {
+
+            if (locationManager.isProviderEnabled(
+                    LocationManager.GPS_PROVIDER)) {
+
+                locationManager.requestLocationUpdates(
+
+                        LocationManager.GPS_PROVIDER,
+
+                        LOCATION_UPDATE_INTERVAL,
+
+                        LOCATION_MIN_DISTANCE,
+
+                        locationListener
+                );
+
+                requested = true;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        // ========================================================
+        // NETWORK / WIFI / CELL TOWER
+        // ========================================================
+
+        try {
+
+            if (locationManager.isProviderEnabled(
+                    LocationManager.NETWORK_PROVIDER)) {
+
+                locationManager.requestLocationUpdates(
+
+                        LocationManager.NETWORK_PROVIDER,
+
+                        LOCATION_UPDATE_INTERVAL,
+
+                        LOCATION_MIN_DISTANCE,
+
+                        locationListener
+                );
+
+                requested = true;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        // ========================================================
+        // PASSIVE PROVIDER
+        // ========================================================
+
+        try {
+
+            if (locationManager.isProviderEnabled(
+                    LocationManager.PASSIVE_PROVIDER)) {
+
+                locationManager.requestLocationUpdates(
+
+                        LocationManager.PASSIVE_PROVIDER,
+
+                        LOCATION_UPDATE_INTERVAL,
+
+                        LOCATION_MIN_DISTANCE,
+
+                        locationListener
+                );
+
+                requested = true;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        if (!requested) {
+
+            showLocationError();
+
+            return;
+        }
 
         if (tvCurrentLocation != null) {
 
             tvCurrentLocation.setText(
+                    "Calculating location..."
+            );
+        }
+
+        // ========================================================
+        // DON'T WAIT FOREVER
+        // ========================================================
+
+        handler.removeCallbacks(
+                locationTimeoutRunnable
+        );
+
+        handler.postDelayed(
+                locationTimeoutRunnable,
+                LOCATION_TIMEOUT
+        );
+    }
+
+    // ============================================================
+    // GET BEST CACHED LOCATION
+    // ============================================================
+
+    private Location getBestLastKnownLocation() {
+
+        if (locationManager == null) {
+            return null;
+        }
+
+        boolean fineGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        boolean coarseGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        if (!fineGranted && !coarseGranted) {
+            return null;
+        }
+
+        Location best = null;
+
+        try {
+
+            // GPS cached location
+            Location gps =
+                    locationManager.getLastKnownLocation(
+                            LocationManager.GPS_PROVIDER
+                    );
+
+            if (gps != null) {
+                best = gps;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            // Network/Wi-Fi/Cell cached location
+            Location network =
+                    locationManager.getLastKnownLocation(
+                            LocationManager.NETWORK_PROVIDER
+                    );
+
+            if (network != null) {
+
+                if (best == null ||
+                        network.getTime() > best.getTime()) {
+
+                    best = network;
+                }
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            // Passive cached location
+            Location passive =
+                    locationManager.getLastKnownLocation(
+                            LocationManager.PASSIVE_PROVIDER
+                    );
+
+            if (passive != null) {
+
+                if (best == null ||
+                        passive.getTime() > best.getTime()) {
+
+                    best = passive;
+                }
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        return best;
+    }
+
+    // ============================================================
+    // LOCATION FOUND
+    // ============================================================
+
+    private void onLocationFound(
+            Location location) {
+
+        if (location == null) {
+            return;
+        }
+
+        locationReceived = true;
+
+        currentLocation = location;
+
+        handler.removeCallbacks(
+                locationTimeoutRunnable
+        );
+
+        hideLoading();
+
+        stopLocationUpdates();
+
+        if (tvCurrentLocation != null) {
+
+            String source = "Location";
+
+            if (LocationManager.GPS_PROVIDER.equals(
+                    location.getProvider())) {
+
+                source = "GPS";
+            } else if (
+                    LocationManager.NETWORK_PROVIDER.equals(
+                            location.getProvider())) {
+
+                source = "Network";
+            } else if (
+                    LocationManager.PASSIVE_PROVIDER.equals(
+                            location.getProvider())) {
+
+                source = "Cached";
+            }
+
+            tvCurrentLocation.setText(
+
                     String.format(
                             Locale.getDefault(),
 
-                            "Current location • %.5f, %.5f",
+                            "%s • %.5f, %.5f",
+
+                            source,
 
                             location.getLatitude(),
+
                             location.getLongitude()
                     )
             );
         }
 
-
-        searchAllSafePlaces();
+        loadFilteredPlaces();
     }
 
+    // ============================================================
+    // FILTER + DISTANCE CALCULATION
+    // ============================================================
 
-    // =============================================================
-    // SEARCH ALL SAFE PLACES
-    // =============================================================
+    private void loadFilteredPlaces() {
 
-    private void searchAllSafePlaces() {
+        if (adapter == null) {
+            return;
+        }
 
         if (currentLocation == null) {
+
+            if (tvResultCount != null) {
+
+                tvResultCount.setText(
+                        "Waiting for location..."
+                );
+            }
 
             return;
         }
 
-
-        showLoading();
-
-
-        if (tvResultCount != null) {
-
-            tvResultCount.setText(
-                    "Searching nearby real places..."
-            );
-        }
-
-
-        /*
-         * Clear old results before performing a fresh search.
-         */
-
-        allPlaces.clear();
-
-        existingPlaceKeys.clear();
-
-
-        final double latitude =
-                currentLocation.getLatitude();
-
-        final double longitude =
-                currentLocation.getLongitude();
-
-
-        executor.execute(() -> {
-
-            List<SafePlace> results =
-                    queryOverpass(
-                            latitude,
-                            longitude
-                    );
-
-
-            runOnUiThread(() -> {
-
-                allPlaces.clear();
-
-                existingPlaceKeys.clear();
-
-
-                if (results != null) {
-
-                    allPlaces.addAll(results);
-                }
-
-
-                sortByDistance();
-
-
-                currentFilter = "ALL";
-
-
-                /*
-                 * Show ALL real results.
-                 *
-                 * There is no artificial limit of 3.
-                 */
-
-                loadFilteredPlaces();
-
-
-                hideLoading();
-
-
-                if (allPlaces.isEmpty()) {
-
-                    if (tvResultCount != null) {
-
-                        tvResultCount.setText(
-                                "No mapped safe places found nearby"
-                        );
-                    }
-
-
-                    Toast.makeText(
-                            this,
-                            "No nearby mapped places were found. Try refreshing or moving to a different area.",
-                            Toast.LENGTH_LONG
-                    ).show();
-
-                } else {
-
-                    if (tvCurrentLocation != null) {
-
-                        tvCurrentLocation.setText(
-                                String.format(
-                                        Locale.getDefault(),
-
-                                        "Near you • %.5f, %.5f",
-
-                                        latitude,
-                                        longitude
-                                )
-                        );
-                    }
-                }
-            });
-        });
-    }
-
-
-    // =============================================================
-    // OVERPASS SEARCH
-    // =============================================================
-
-    private List<SafePlace> queryOverpass(
-            double latitude,
-            double longitude
-    ) {
-
-        /*
-         * This query asks OpenStreetMap for MANY useful real-world
-         * locations within 10 km.
-         *
-         * We intentionally include:
-         *
-         * - Police
-         * - Hospitals
-         * - Clinics
-         * - Pharmacies
-         * - Fire stations
-         * - Schools
-         * - Colleges
-         * - Universities
-         * - Shopping malls
-         * - Supermarkets
-         * - Markets
-         * - Department stores
-         * - Banks
-         * - ATMs
-         * - Hotels
-         * - Bus stations
-         * - Railway stations
-         * - Public transport
-         * - Community centres
-         * - Libraries
-         * - Government/public buildings
-         * - Shelters
-         *
-         * These are actual OSM objects, not generated locations.
-         */
-
-        String query =
-
-                "[out:json][timeout:40];"
-
-                        + "("
-
-                        // -------------------------------------------------
-                        // POLICE
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=police]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // HOSPITALS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=hospital]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // CLINICS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=clinic]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // PHARMACIES
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=pharmacy]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // FIRE STATIONS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=fire_station]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // SCHOOLS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=school]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // COLLEGES
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=college]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // UNIVERSITIES
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=university]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // COMMUNITY CENTRES
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=community_centre]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // LIBRARIES
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=library]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // SHELTERS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=shelter]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // BANKS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=bank]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // ATMS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=atm]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // SHOPPING MALLS
-                        // -------------------------------------------------
-
-                        + "nwr[shop=mall]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // SUPERMARKETS
-                        // -------------------------------------------------
-
-                        + "nwr[shop=supermarket]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // DEPARTMENT STORES
-                        // -------------------------------------------------
-
-                        + "nwr[shop=department_store]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // CONVENIENCE STORES
-                        // -------------------------------------------------
-
-                        + "nwr[shop=convenience]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // MARKETPLACES
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=marketplace]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // HOTELS
-                        // -------------------------------------------------
-
-                        + "nwr[tourism=hotel]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // HOSTELS
-                        // -------------------------------------------------
-
-                        + "nwr[tourism=hostel]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // BUS STATIONS
-                        // -------------------------------------------------
-
-                        + "nwr[amenity=bus_station]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // RAILWAY STATIONS
-                        // -------------------------------------------------
-
-                        + "nwr[railway=station]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // PUBLIC TRANSPORT
-                        // -------------------------------------------------
-
-                        + "nwr[public_transport=station]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        // -------------------------------------------------
-                        // GOVERNMENT / PUBLIC BUILDINGS
-                        // -------------------------------------------------
-
-                        + "nwr[office=government]"
-                        + "(around:"
-                        + SEARCH_RADIUS_METERS
-                        + ","
-                        + latitude
-                        + ","
-                        + longitude
-                        + ");"
-
-
-                        + ");"
-
-                        /*
-                         * center gives ways/relations a usable
-                         * representative latitude/longitude.
-                         *
-                         * tags gives us names, addresses,
-                         * phone numbers, categories, etc.
-                         */
-
-                        + "out center tags;";
-
-
-        /*
-         * Try multiple Overpass servers.
-         */
-
-        for (
-                String endpoint :
-                OVERPASS_ENDPOINTS
-        ) {
-
-            HttpURLConnection connection = null;
-
-            try {
-
-                String encodedQuery =
-                        URLEncoder.encode(
-                                query,
-                                StandardCharsets.UTF_8.toString()
-                        );
-
-
-                URL url =
-                        new URL(
-                                endpoint
-                                        + "?data="
-                                        + encodedQuery
-                        );
-
-
-                connection =
-                        (HttpURLConnection)
-                                url.openConnection();
-
-
-                connection.setRequestMethod(
-                        "GET"
-                );
-
-                connection.setConnectTimeout(
-                        15000
-                );
-
-                connection.setReadTimeout(
-                        45000
-                );
-
-                connection.setRequestProperty(
-                        "User-Agent",
-                        "SheShield/1.0 Android Safe Zones"
-                );
-
-
-                int responseCode =
-                        connection.getResponseCode();
-
-
-                if (
-                        responseCode >= 200
-                                &&
-                                responseCode < 300
-                ) {
-
-                    InputStream inputStream =
-                            connection.getInputStream();
-
-
-                    String response =
-                            readInputStream(
-                                    inputStream
-                            );
-
-
-                    return parseOverpassResponse(
-                            response
-                    );
-                }
-
-            } catch (Exception ignored) {
-
-                /*
-                 * Try the next Overpass server.
-                 */
-
-            } finally {
-
-                if (connection != null) {
-
-                    connection.disconnect();
-                }
-            }
-        }
-
-
-        return new ArrayList<>();
-    }
-
-
-    // =============================================================
-    // READ NETWORK RESPONSE
-    // =============================================================
-
-    private String readInputStream(
-            InputStream inputStream
-    ) throws Exception {
-
-        StringBuilder builder =
-                new StringBuilder();
-
-
-        BufferedReader reader =
-                new BufferedReader(
-                        new InputStreamReader(
-                                inputStream,
-                                StandardCharsets.UTF_8
-                        )
-                );
-
-
-        String line;
-
-
-        while (
-                (line = reader.readLine())
-                        != null
-        ) {
-
-            builder.append(line);
-        }
-
-
-        reader.close();
-
-
-        return builder.toString();
-    }
-
-
-    // =============================================================
-    // PARSE OVERPASS JSON
-    // =============================================================
-
-    private List<SafePlace> parseOverpassResponse(
-            String json
-    ) {
-
-        List<SafePlace> results =
+        List<SafePlace> nearbyPlaces =
                 new ArrayList<>();
 
+        for (SafePlace place : allPlaces) {
 
-        if (
-                json == null
-                        ||
-                        json.trim().isEmpty()
-        ) {
-
-            return results;
-        }
-
-
-        try {
-
-            JSONObject root =
-                    new JSONObject(json);
-
-
-            JSONArray elements =
-                    root.optJSONArray(
-                            "elements"
-                    );
-
-
-            if (elements == null) {
-
-                return results;
+            if (place == null) {
+                continue;
             }
 
+            float[] distance =
+                    new float[1];
 
-            for (
-                    int i = 0;
-                    i < elements.length();
-                    i++
-            ) {
+            Location.distanceBetween(
 
-                JSONObject element =
-                        elements.optJSONObject(i);
+                    currentLocation.getLatitude(),
 
+                    currentLocation.getLongitude(),
 
-                if (element == null) {
+                    place.latitude,
 
-                    continue;
-                }
+                    place.longitude,
 
-
-                JSONObject tags =
-                        element.optJSONObject(
-                                "tags"
-                        );
-
-
-                if (tags == null) {
-
-                    continue;
-                }
-
-
-                /*
-                 * Get coordinates.
-                 *
-                 * Node:
-                 *   lat / lon
-                 *
-                 * Way/relation:
-                 *   center.lat / center.lon
-                 */
-
-                double lat =
-                        element.optDouble(
-                                "lat",
-                                Double.NaN
-                        );
-
-                double lon =
-                        element.optDouble(
-                                "lon",
-                                Double.NaN
-                        );
-
-
-                if (
-                        Double.isNaN(lat)
-                                ||
-                                Double.isNaN(lon)
-                ) {
-
-                    JSONObject center =
-                            element.optJSONObject(
-                                    "center"
-                            );
-
-
-                    if (center != null) {
-
-                        lat =
-                                center.optDouble(
-                                        "lat",
-                                        Double.NaN
-                                );
-
-                        lon =
-                                center.optDouble(
-                                        "lon",
-                                        Double.NaN
-                                );
-                    }
-                }
-
-
-                /*
-                 * Never add a result without valid coordinates.
-                 */
-
-                if (
-                        Double.isNaN(lat)
-                                ||
-                                Double.isNaN(lon)
-                ) {
-
-                    continue;
-                }
-
-
-                String elementType =
-                        element.optString(
-                                "type",
-                                ""
-                        );
-
-
-                long elementId =
-                        element.optLong(
-                                "id",
-                                0
-                        );
-
-
-                String placeKey =
-                        elementType
-                                + "_"
-                                + elementId;
-
-
-                /*
-                 * Prevent duplicates.
-                 */
-
-                if (
-                        existingPlaceKeys.contains(
-                                placeKey
-                        )
-                ) {
-
-                    continue;
-                }
-
-
-                existingPlaceKeys.add(
-                        placeKey
-                );
-
-
-                String name =
-                        firstNonEmpty(
-                                tags.optString(
-                                        "name",
-                                        ""
-                                ),
-
-                                tags.optString(
-                                        "official_name",
-                                        ""
-                                ),
-
-                                tags.optString(
-                                        "brand",
-                                        ""
-                                ),
-
-                                "Nearby Safe Place"
-                        );
-
-
-                String category =
-                        getCategoryFromTags(
-                                tags
-                        );
-
-
-                String address =
-                        getAddressFromTags(
-                                tags
-                        );
-
-
-                String phone =
-                        firstNonEmpty(
-                                tags.optString(
-                                        "phone",
-                                        ""
-                                ),
-
-                                tags.optString(
-                                        "contact:phone",
-                                        ""
-                                ),
-
-                                tags.optString(
-                                        "mobile",
-                                        ""
-                                ),
-
-                                ""
-                        );
-
-
-                /*
-                 * Calculate actual distance from user's
-                 * actual GPS location.
-                 */
-
-                float[] distance =
-                        new float[1];
-
-
-                if (currentLocation != null) {
-
-                    Location.distanceBetween(
-
-                            currentLocation.getLatitude(),
-                            currentLocation.getLongitude(),
-
-                            lat,
-                            lon,
-
-                            distance
-                    );
-
-                } else {
-
-                    distance[0] = Float.MAX_VALUE;
-                }
-
-
-                double distanceKm =
-                        distance[0] / 1000.0;
-
-
-                /*
-                 * Ignore impossible/outside-radius objects.
-                 *
-                 * This protects against malformed OSM data.
-                 */
-
-                if (
-                        distance[0]
-                                >
-                                SEARCH_RADIUS_METERS + 500
-                ) {
-
-                    continue;
-                }
-
-
-                SafePlace safePlace =
-                        new SafePlace(
-
-                                name,
-
-                                category,
-
-                                address,
-
-                                phone,
-
-                                distanceKm,
-
-                                lat,
-
-                                lon,
-
-                                placeKey
-                        );
-
-
-                results.add(
-                        safePlace
-                );
-            }
-
-
-            /*
-             * Nearest first.
-             */
-
-            Collections.sort(
-                    results,
-
-                    Comparator.comparingDouble(
-                            place ->
-                                    place.distanceKm
-                    )
+                    distance
             );
 
+            place.distanceKm =
+                    distance[0] / 1000.0;
 
-        } catch (Exception ignored) {
+            if (place.distanceKm >
+                    SEARCH_RADIUS_KM) {
 
-            /*
-             * Invalid JSON / server response.
-             */
-        }
-
-
-        return results;
-    }
-
-
-    // =============================================================
-    // CATEGORY FROM OSM TAGS
-    // =============================================================
-
-    private String getCategoryFromTags(
-            JSONObject tags
-    ) {
-
-        String amenity =
-                tags.optString(
-                                "amenity",
-                                ""
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-
-        String shop =
-                tags.optString(
-                                "shop",
-                                ""
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-
-        String tourism =
-                tags.optString(
-                                "tourism",
-                                ""
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-
-        String railway =
-                tags.optString(
-                                "railway",
-                                ""
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-
-        String publicTransport =
-                tags.optString(
-                                "public_transport",
-                                ""
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-
-        String office =
-                tags.optString(
-                                "office",
-                                ""
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-
-        // ---------------------------------------------------------
-        // POLICE
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("police")
-        ) {
-
-            return "POLICE";
-        }
-
-
-        // ---------------------------------------------------------
-        // HOSPITAL
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("hospital")
-        ) {
-
-            return "HOSPITAL";
-        }
-
-
-        // ---------------------------------------------------------
-        // CLINIC
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("clinic")
-        ) {
-
-            return "CLINIC";
-        }
-
-
-        // ---------------------------------------------------------
-        // PHARMACY
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("pharmacy")
-        ) {
-
-            return "PHARMACY";
-        }
-
-
-        // ---------------------------------------------------------
-        // FIRE STATION
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("fire_station")
-        ) {
-
-            return "FIRE STATION";
-        }
-
-
-        // ---------------------------------------------------------
-        // SCHOOL
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("school")
-        ) {
-
-            return "SCHOOL";
-        }
-
-
-        // ---------------------------------------------------------
-        // COLLEGE
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("college")
-        ) {
-
-            return "COLLEGE";
-        }
-
-
-        // ---------------------------------------------------------
-        // UNIVERSITY
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("university")
-        ) {
-
-            return "UNIVERSITY";
-        }
-
-
-        // ---------------------------------------------------------
-        // COMMUNITY CENTRE
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals(
-                        "community_centre"
-                )
-        ) {
-
-            return "COMMUNITY CENTRE";
-        }
-
-
-        // ---------------------------------------------------------
-        // LIBRARY
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("library")
-        ) {
-
-            return "LIBRARY";
-        }
-
-
-        // ---------------------------------------------------------
-        // SHELTER
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("shelter")
-        ) {
-
-            return "SHELTER";
-        }
-
-
-        // ---------------------------------------------------------
-        // BANK
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("bank")
-        ) {
-
-            return "BANK";
-        }
-
-
-        // ---------------------------------------------------------
-        // ATM
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("atm")
-        ) {
-
-            return "ATM";
-        }
-
-
-        // ---------------------------------------------------------
-        // SHOPPING / CROWDED
-        // ---------------------------------------------------------
-
-        if (
-                shop.equals("mall")
-                        ||
-                        shop.equals("supermarket")
-                        ||
-                        shop.equals("department_store")
-                        ||
-                        shop.equals("convenience")
-                        ||
-                        amenity.equals("marketplace")
-        ) {
-
-            return "CROWDED HUB";
-        }
-
-
-        // ---------------------------------------------------------
-        // HOTEL
-        // ---------------------------------------------------------
-
-        if (
-                tourism.equals("hotel")
-        ) {
-
-            return "HOTEL";
-        }
-
-
-        // ---------------------------------------------------------
-        // HOSTEL
-        // ---------------------------------------------------------
-
-        if (
-                tourism.equals("hostel")
-        ) {
-
-            return "HOSTEL";
-        }
-
-
-        // ---------------------------------------------------------
-        // RAILWAY
-        // ---------------------------------------------------------
-
-        if (
-                railway.equals("station")
-        ) {
-
-            return "RAILWAY STATION";
-        }
-
-
-        // ---------------------------------------------------------
-        // BUS / PUBLIC TRANSPORT
-        // ---------------------------------------------------------
-
-        if (
-                amenity.equals("bus_station")
-                        ||
-                        publicTransport.equals(
-                                "station"
-                        )
-        ) {
-
-            return "TRANSPORT HUB";
-        }
-
-
-        // ---------------------------------------------------------
-        // GOVERNMENT
-        // ---------------------------------------------------------
-
-        if (
-                office.equals("government")
-        ) {
-
-            return "GOVERNMENT";
-        }
-
-
-        return "SAFE PLACE";
-    }
-
-
-    // =============================================================
-    // ADDRESS
-    // =============================================================
-
-    private String getAddressFromTags(
-            JSONObject tags
-    ) {
-
-        String fullAddress =
-                firstNonEmpty(
-                        tags.optString(
-                                "addr:full",
-                                ""
-                        ),
-
-                        tags.optString(
-                                "address",
-                                ""
-                        ),
-
-                        ""
-                );
-
-
-        if (
-                !fullAddress.isEmpty()
-        ) {
-
-            return fullAddress;
-        }
-
-
-        List<String> parts =
-                new ArrayList<>();
-
-
-        addAddressPart(
-                parts,
-                tags,
-                "addr:housenumber"
-        );
-
-        addAddressPart(
-                parts,
-                tags,
-                "addr:street"
-        );
-
-        addAddressPart(
-                parts,
-                tags,
-                "addr:suburb"
-        );
-
-        addAddressPart(
-                parts,
-                tags,
-                "addr:neighbourhood"
-        );
-
-        addAddressPart(
-                parts,
-                tags,
-                "addr:city"
-        );
-
-        addAddressPart(
-                parts,
-                tags,
-                "addr:postcode"
-        );
-
-
-        if (parts.isEmpty()) {
-
-            return "Address unavailable";
-        }
-
-
-        StringBuilder builder =
-                new StringBuilder();
-
-
-        for (
-                int i = 0;
-                i < parts.size();
-                i++
-        ) {
-
-            if (i > 0) {
-
-                builder.append(", ");
+                continue;
             }
-
-            builder.append(
-                    parts.get(i)
-            );
-        }
-
-
-        return builder.toString();
-    }
-
-
-    // =============================================================
-    // ADDRESS PART
-    // =============================================================
-
-    private void addAddressPart(
-            List<String> parts,
-            JSONObject tags,
-            String key
-    ) {
-
-        String value =
-                tags.optString(
-                        key,
-                        ""
-                ).trim();
-
-
-        if (!value.isEmpty()) {
-
-            parts.add(value);
-        }
-    }
-
-
-    // =============================================================
-    // FIRST NON-EMPTY STRING
-    // =============================================================
-
-    private String firstNonEmpty(
-            String... values
-    ) {
-
-        if (values == null) {
-
-            return "";
-        }
-
-
-        for (
-                String value :
-                values
-        ) {
-
-            if (
-                    value != null
-                            &&
-                            !value.trim().isEmpty()
-            ) {
-
-                return value.trim();
-            }
-        }
-
-
-        return "";
-    }
-
-
-    // =============================================================
-    // LOAD FILTERED PLACES
-    // =============================================================
-
-    private void loadFilteredPlaces() {
-
-        List<SafePlace> filtered =
-                new ArrayList<>();
-
-
-        // =============================================================
-        // APPLY CURRENT FILTER
-        // =============================================================
-
-        for (
-                SafePlace place :
-                allPlaces
-        ) {
 
             if (matchesCurrentFilter(place)) {
 
-                filtered.add(place);
+                nearbyPlaces.add(place);
             }
         }
 
-
-        // =============================================================
-        // SORT BY NEAREST DISTANCE
-        // =============================================================
-
-        sortList(filtered);
-
-
-        // =============================================================
-        // SHOW MAXIMUM 20 REAL PLACES
-        // =============================================================
-
-        if (filtered.size() > 20) {
-
-            filtered =
-                    new ArrayList<>(
-                            filtered.subList(
-                                    0,
-                                    20
-                            )
-                    );
-        }
-
-
-        // =============================================================
-        // UPDATE RECYCLER VIEW
-        // =============================================================
-
-        adapter.updateList(
-                filtered
-        );
-
-
-        // =============================================================
-        // UPDATE RESULT COUNT
-        // =============================================================
-
-        updateResultCount(
-                filtered.size()
-        );
-    }
-
-    // =============================================================
-    // FILTER MATCH
-    // =============================================================
-
-    private boolean matchesCurrentFilter(
-            SafePlace place
-    ) {
-
-        if (
-                place == null
-                        ||
-                        place.category == null
-        ) {
-
-            return false;
-        }
-
-
-        if (
-                currentFilter.equals("ALL")
-        ) {
-
-            return true;
-        }
-
-
-        if (
-                currentFilter.equals("POLICE")
-        ) {
-
-            return place.category.equals(
-                    "POLICE"
-            );
-        }
-
-
-        if (
-                currentFilter.equals("HOSPITAL")
-        ) {
-
-            return place.category.equals(
-                    "HOSPITAL"
-            )
-                    ||
-                    place.category.equals(
-                            "CLINIC"
-                    )
-                    ||
-                    place.category.equals(
-                            "PHARMACY"
-                    );
-        }
-
-
-        if (
-                currentFilter.equals("CROWDED")
-        ) {
-
-            return place.category.equals(
-                    "CROWDED HUB"
-            );
-        }
-
-
-        return true;
-    }
-
-
-    // =============================================================
-    // SORT ALL PLACES
-    // =============================================================
-
-    private void sortByDistance() {
-
-        sortList(
-                allPlaces
-        );
-    }
-
-
-    // =============================================================
-    // SORT LIST
-    // =============================================================
-
-    private void sortList(
-            List<SafePlace> list
-    ) {
-
         Collections.sort(
 
-                list,
+                nearbyPlaces,
 
                 Comparator.comparingDouble(
                         place ->
                                 place.distanceKm
                 )
         );
+
+        if (nearbyPlaces.size() >
+                MAX_RESULTS) {
+
+            nearbyPlaces =
+                    new ArrayList<>(
+                            nearbyPlaces.subList(
+                                    0,
+                                    MAX_RESULTS
+                            )
+                    );
+        }
+
+        adapter.updateList(
+                nearbyPlaces
+        );
+
+        updateResultCount(
+                nearbyPlaces.size()
+        );
     }
 
+    // ============================================================
+    // FILTER MATCH
+    // ============================================================
 
-    // =============================================================
-    // OPEN GOOGLE MAPS
-    // =============================================================
-
-    private void openGoogleMaps(
-            SafePlace place
-    ) {
+    private boolean matchesCurrentFilter(
+            SafePlace place) {
 
         if (place == null) {
+            return false;
+        }
 
+        if (currentFilter.equals("ALL")) {
+            return true;
+        }
+
+        String category =
+                place.category == null
+                        ? ""
+                        : place.category
+                        .trim()
+                        .toUpperCase(
+                                Locale.ROOT
+                        );
+
+        if (currentFilter.equals("POLICE")) {
+
+            return category.contains(
+                    "POLICE"
+            );
+        }
+
+        if (currentFilter.equals("HOSPITAL")) {
+
+            return category.contains(
+                    "HOSPITAL"
+            )
+                    ||
+                    category.contains(
+                            "CLINIC"
+                    )
+                    ||
+                    category.contains(
+                            "PHARMACY"
+                    );
+        }
+
+        if (currentFilter.equals("CROWDED")) {
+
+            return category.contains(
+                    "CROWDED"
+            )
+                    ||
+                    category.contains(
+                            "BUS"
+                    )
+                    ||
+                    category.contains(
+                            "METRO"
+                    )
+                    ||
+                    category.contains(
+                            "MARKET"
+                    )
+                    ||
+                    category.contains(
+                            "MALL"
+                    )
+                    ||
+                    category.contains(
+                            "STATION"
+                    );
+        }
+
+        return true;
+    }
+
+    // ============================================================
+    // RESULT COUNT
+    // ============================================================
+
+    private void updateResultCount(
+            int count) {
+
+        if (tvResultCount == null) {
             return;
         }
 
+        if (count == 0) {
+
+            tvResultCount.setText(
+                    "No safe places within 5 km"
+            );
+
+        } else if (count == 1) {
+
+            tvResultCount.setText(
+                    "1 safe place found nearby"
+            );
+
+        } else {
+
+            tvResultCount.setText(
+                    count +
+                            " safe places found nearby"
+            );
+        }
+    }
+
+    // ============================================================
+    // NAVIGATION
+    // ============================================================
+
+    private void openOfflineLocation(
+            SafePlace place) {
+
+        if (place == null) {
+            return;
+        }
 
         try {
 
-            /*
-             * First try the Google Maps Android application.
-             */
-
-            Uri navigationUri =
-                    Uri.parse(
-
-                            "google.navigation:q="
-                                    + place.lat
-                                    + ","
-                                    + place.lng
-                    );
-
+            // ---------------------------------------------------------
+            // OPEN SHE SHIELD'S OWN OFFLINE MAP
+            // ---------------------------------------------------------
 
             Intent intent =
                     new Intent(
-                            Intent.ACTION_VIEW,
-                            navigationUri
+                            SafeZonesActivity.this,
+                            OfflineMapActivity.class
                     );
 
+            // ---------------------------------------------------------
+            // SEND SELECTED SAFE PLACE TO OFFLINE MAP
+            // ---------------------------------------------------------
 
-            intent.setPackage(
-                    "com.google.android.apps.maps"
+            intent.putExtra(
+                    "safe_zone_latitude",
+                    place.latitude
             );
 
-
-            if (
-                    intent.resolveActivity(
-                            getPackageManager()
-                    ) != null
-            ) {
-
-                startActivity(intent);
-
-                return;
-            }
-
-
-            /*
-             * Google Maps app unavailable.
-             *
-             * Open Google Maps in the browser.
-             *
-             * This does NOT require a Google API key.
-             */
-
-            Uri webUri =
-                    Uri.parse(
-
-                            "https://www.google.com/maps/dir/?api=1"
-                                    + "&destination="
-                                    + place.lat
-                                    + ","
-                                    + place.lng
-                    );
-
-
-            startActivity(
-                    new Intent(
-                            Intent.ACTION_VIEW,
-                            webUri
-                    )
+            intent.putExtra(
+                    "safe_zone_longitude",
+                    place.longitude
             );
 
+            intent.putExtra(
+                    "safe_zone_name",
+                    place.name == null
+                            ? "Safe Place"
+                            : place.name
+            );
+
+            intent.putExtra(
+                    "safe_zone_address",
+                    place.address == null
+                            ? ""
+                            : place.address
+            );
+
+            intent.putExtra(
+                    "open_safe_zone",
+                    true
+            );
+
+            // ---------------------------------------------------------
+            // START YOUR LOCAL OFFLINE MAP
+            // ---------------------------------------------------------
+
+            startActivity(intent);
 
         } catch (Exception e) {
 
             Toast.makeText(
-                    this,
-                    "Unable to open directions.",
+                    SafeZonesActivity.this,
+                    "Unable to open offline map",
                     Toast.LENGTH_SHORT
             ).show();
         }
     }
 
+    // ============================================================
+    // SHOW COORDINATES
+    // ============================================================
 
-    // =============================================================
-    // CALL PLACE
-    // =============================================================
+    private void showCoordinates(
+            SafePlace place) {
+
+        Toast.makeText(
+
+                this,
+
+                place.name
+                        + "\n"
+                        + String.format(
+                        Locale.getDefault(),
+                        "%.6f, %.6f",
+                        place.latitude,
+                        place.longitude
+                ),
+
+                Toast.LENGTH_LONG
+
+        ).show();
+    }
+
+    // ============================================================
+    // CALL
+    // ============================================================
 
     private void callPlace(
-            SafePlace place
-    ) {
+            SafePlace place) {
 
         if (
-                place == null
-                        ||
-                        place.phoneNumber == null
-                        ||
+                place == null ||
+                        place.phoneNumber == null ||
                         place.phoneNumber.trim().isEmpty()
         ) {
 
             Toast.makeText(
                     this,
-                    "Phone number is not available.",
+                    "Phone number unavailable",
                     Toast.LENGTH_SHORT
             ).show();
 
             return;
         }
-
 
         try {
 
@@ -2269,24 +1267,56 @@ public class SafeZonesActivity extends BaseActivity {
                             )
                     );
 
-
             startActivity(intent);
-
 
         } catch (Exception e) {
 
             Toast.makeText(
                     this,
-                    "Unable to open dialer.",
+                    "Unable to open dialer",
                     Toast.LENGTH_SHORT
             ).show();
         }
     }
 
+    // ============================================================
+    // LOCATION ERROR
+    // ============================================================
 
-    // =============================================================
-    // SHOW LOADING
-    // =============================================================
+    private void showLocationError() {
+
+        stopLocationUpdates();
+
+        handler.removeCallbacks(
+                locationTimeoutRunnable
+        );
+
+        hideLoading();
+
+        if (tvCurrentLocation != null) {
+
+            tvCurrentLocation.setText(
+                    "Location unavailable"
+            );
+        }
+
+        if (tvResultCount != null) {
+
+            tvResultCount.setText(
+                    "Enable Location and tap Refresh"
+            );
+        }
+
+        Toast.makeText(
+                this,
+                "Unable to get location. Please enable Location.",
+                Toast.LENGTH_LONG
+        ).show();
+    }
+
+    // ============================================================
+    // LOADING
+    // ============================================================
 
     private void showLoading() {
 
@@ -2298,11 +1328,6 @@ public class SafeZonesActivity extends BaseActivity {
         }
     }
 
-
-    // =============================================================
-    // HIDE LOADING
-    // =============================================================
-
     private void hideLoading() {
 
         if (progressBar != null) {
@@ -2313,60 +1338,63 @@ public class SafeZonesActivity extends BaseActivity {
         }
     }
 
+    // ============================================================
+    // STOP LOCATION
+    // ============================================================
 
-    // =============================================================
-    // RESULT COUNT
-    // =============================================================
+    private void stopLocationUpdates() {
 
-    private void updateResultCount(
-            int count
-    ) {
+        try {
 
-        if (tvResultCount == null) {
+            if (locationManager != null) {
 
-            return;
-        }
+                boolean fineGranted =
+                        ActivityCompat.checkSelfPermission(
+                                this,
+                                Manifest.permission.ACCESS_FINE_LOCATION
+                        )
+                                == PackageManager.PERMISSION_GRANTED;
 
+                boolean coarseGranted =
+                        ActivityCompat.checkSelfPermission(
+                                this,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                                == PackageManager.PERMISSION_GRANTED;
 
-        if (count == 0) {
+                if (fineGranted || coarseGranted) {
 
-            tvResultCount.setText(
-                    "No safe places found"
-            );
+                    locationManager.removeUpdates(
+                            locationListener
+                    );
+                }
+            }
 
-        } else if (count == 1) {
-
-            tvResultCount.setText(
-                    "1 safe place found nearby"
-            );
-
-        } else {
-
-            tvResultCount.setText(
-                    count
-                            + " safe places found nearby"
-            );
+        } catch (Exception ignored) {
         }
     }
 
-
-    // =============================================================
+    // ============================================================
     // PERMISSION RESULT
-    // =============================================================
+    // ============================================================
 
     @Override
     public void onRequestPermissionsResult(
+
             int requestCode,
+
             @NonNull String[] permissions,
-            @NonNull int[] grantResults
-    ) {
+
+            @NonNull int[] grantResults) {
 
         super.onRequestPermissionsResult(
+
                 requestCode,
+
                 permissions,
+
                 grantResults
         );
-
 
         if (
                 requestCode
@@ -2374,14 +1402,9 @@ public class SafeZonesActivity extends BaseActivity {
                         LOCATION_PERMISSION_REQUEST_CODE
         ) {
 
-            boolean locationGranted =
-                    false;
+            boolean granted = false;
 
-
-            for (
-                    int result :
-                    grantResults
-            ) {
+            for (int result : grantResults) {
 
                 if (
                         result
@@ -2389,21 +1412,19 @@ public class SafeZonesActivity extends BaseActivity {
                                 PackageManager.PERMISSION_GRANTED
                 ) {
 
-                    locationGranted = true;
+                    granted = true;
 
                     break;
                 }
             }
 
+            if (granted) {
 
-            if (locationGranted) {
-
-                getUserLocation();
+                getCurrentLocation();
 
             } else {
 
                 hideLoading();
-
 
                 if (tvCurrentLocation != null) {
 
@@ -2412,43 +1433,69 @@ public class SafeZonesActivity extends BaseActivity {
                     );
                 }
 
+                if (tvResultCount != null) {
 
-                Toast.makeText(
-                        this,
-
-                        "Location permission is required to find nearby safe places.",
-
-                        Toast.LENGTH_LONG
-                ).show();
+                    tvResultCount.setText(
+                            "Allow location permission to continue"
+                    );
+                }
             }
         }
     }
 
+    // ============================================================
+    // RESUME
+    // ============================================================
 
-    // =============================================================
-    // ACTIVITY DESTROYED
-    // =============================================================
+    @Override
+    protected void onResume() {
+
+        super.onResume();
+
+        boolean fineGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        boolean coarseGranted =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+                        == PackageManager.PERMISSION_GRANTED;
+
+        if (currentLocation == null &&
+                (fineGranted || coarseGranted)) {
+
+            getCurrentLocation();
+        }
+    }
+
+    // ============================================================
+    // DESTROY
+    // ============================================================
 
     @Override
     protected void onDestroy() {
 
+        handler.removeCallbacksAndMessages(
+                null
+        );
+
+        stopLocationUpdates();
+
         super.onDestroy();
-
-
-        /*
-         * Stop the background executor when the Activity is
-         * destroyed.
-         */
-
-        executor.shutdownNow();
     }
 
-
-    // =============================================================
+    // ============================================================
     // SAFE PLACE MODEL
-    // =============================================================
+    // ============================================================
 
     public static class SafePlace {
+
+        public String id;
 
         public String name;
 
@@ -2458,16 +1505,15 @@ public class SafeZonesActivity extends BaseActivity {
 
         public String phoneNumber;
 
+        public double latitude;
+
+        public double longitude;
+
         public double distanceKm;
 
-        public double lat;
-
-        public double lng;
-
-        public String placeId;
-
-
         public SafePlace(
+
+                String id,
 
                 String name,
 
@@ -2477,39 +1523,25 @@ public class SafeZonesActivity extends BaseActivity {
 
                 String phoneNumber,
 
-                double distanceKm,
+                double latitude,
 
-                double lat,
+                double longitude) {
 
-                double lng,
+            this.id = id;
 
-                String placeId
+            this.name = name;
 
-        ) {
+            this.category = category;
 
-            this.name =
-                    name;
+            this.address = address;
 
-            this.category =
-                    category;
+            this.phoneNumber = phoneNumber;
 
-            this.address =
-                    address;
+            this.latitude = latitude;
 
-            this.phoneNumber =
-                    phoneNumber;
+            this.longitude = longitude;
 
-            this.distanceKm =
-                    distanceKm;
-
-            this.lat =
-                    lat;
-
-            this.lng =
-                    lng;
-
-            this.placeId =
-                    placeId;
+            this.distanceKm = 0.0;
         }
     }
 }

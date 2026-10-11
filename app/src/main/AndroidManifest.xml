@@ -8,6 +8,7 @@
     <!-- ============================================================ -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -15,6 +16,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Required for osmdroid offline tile caching on API 28 and lower -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <!-- ============================================================ -->
     <!-- APPLICATION -->
@@ -28,7 +32,9 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SheShield">
+        android:theme="@style/Theme.SheShield"
+        android:usesCleartextTraffic="true">
+
 
         <!-- SPLASH -->
         <activity
@@ -45,6 +51,25 @@
             android:name=".MainActivity"
             android:exported="true" />
 
+        <!-- FIXED -->
+        <activity
+            android:name=".OtpAuthActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- OFFLINE MAP -->
+        <activity
+            android:name=".OfflineMapActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
+
+
+        <activity
+            android:name=".QuantumDashboardActivity"
+            android:exported="false" />
+
+        
         <!-- SETTINGS -->
         <activity
             android:name=".SettingsActivity"
@@ -75,10 +100,18 @@
             android:exported="false"
             android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
 
+        <activity
+            android:name=".IncidentReportActivity"
+            android:exported="false"
+            android:label="Incident Report" />
+
         <!-- FAKE CALL -->
         <activity
             android:name=".FakeCallActivity"
             android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
 
         <!-- SAFETY TIPS -->
