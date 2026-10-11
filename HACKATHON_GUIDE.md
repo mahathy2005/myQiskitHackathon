@@ -134,3 +134,4 @@ All participants are expected to maintain the highest standards of integrity, re
    Deadlines for both Form 1 (October 10, 2026 by 10:00 PM) and Form 2 (October 11, 2026 by 7:05 PM) are strict. Late submissions risk missing evaluation.
 
 **Good luck, have fun, and happy quantum hacking! 🚀**
+
